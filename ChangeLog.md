@@ -2,13 +2,17 @@
 
 ### HEAD
 
+- Bump cookie, express and socket.io in /gerbera-web
 - Config: UI handler mimetypes and CSP
 - Fix access to cache option if thumbnailer disabled
+- Fix autoscan issue with empty filename
 - Fix build without ffmpeg
 - Fix creating containers in web ui
 - Fix handling of checkbox values on web ui
 - Improve handling multivalue tags in virtual paths
 - Increase size of pupnp threadpool
+- Resource directory configuration and cleanup collection
+- Update Build Environment
 - UPnP: Add support for filters
 - Web UI: Add Search page
 - Web UI: Fix detail display
