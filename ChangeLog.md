@@ -2,8 +2,41 @@
 
 ### HEAD
 
+- Add Options to Scripts
+- Add Run Scan action in Web UI
+- Autoscan: Add missing properties to web UI and database
+- Build correct Autoscan Type
+- Build with fmt 11.1.3
+- Cleanup tree and autoscan commands
+- Debian Build for arm64
+- Downgrade docker builder as well
+- Extract Pixelformat for videos
 - Fix album art in builtin layout
+- Fix config load from database
+- Fix cors host without ipv6 address
+- Fix management auf autoscans in list
+- Fix update of playlists
+- Fix UpnpMap logic
+- Focal: Freeze more aws-sdk versions
+- Focal: freeze ruby aws-sdk versions used for package upload
+- Force Reread of unknown files
+- Generate Comment from Metadata During Scan
+- Improve logging of string conversion
+- JS: Fix config autoscan object in scripts
+- Populate playlist item titles
 - Refactor static code from ConfigDefinition
+- Refactor WebRequests
+- Remap metadata fields when parsing virtual-directories keys
+- Rework autoscan list handling
+- Set more metadata in builtin layout
+- Sqlite: Exit after multiple exceptions
+- Support Resources for External Items
+- UI: Make details collapsable in items editor detail view
+- Update Library Versions
+- Update to googletest 1.16.0
+- Update libexiv2 to 0.28.4
+- Update wavpack
+- work around build issue
 
 ### v2.4.1
 

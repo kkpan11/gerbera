@@ -150,7 +150,8 @@ This tag defines the import section.
 
     * Default: **yes**
 
-    This attribute defines that each imported item will get a default media date set based on the modification time in order to ensure that sorting by "dc:date" works on upnp requests.
+    This attribute defines that each imported item will get a default media date set based on the modification
+    time in order to ensure that sorting by "dc:date" works on upnp requests.
 
     .. code:: xml
 
@@ -170,7 +171,8 @@ This tag defines the import section.
 
     * Default: **yes**
 
-    This attribute defines that filenames are made readable on import, i.e. underscores are replaced by space and extensions are removed. This changes the title of the entry if no metadata is available
+    This attribute defines that filenames are made readable on import, i.e. underscores are replaced by space and extensions are removed.
+    This changes the title of the entry if no metadata is available
 
     .. code:: xml
 
@@ -336,6 +338,7 @@ Below are the available scripting options:
 
         Points to the script invoked upon media import. For more details read about :ref:`scripting <scripting>`.
 
+.. _script-options:
 
 ``script-options``
 ------------------
@@ -374,7 +377,7 @@ Below are the available scripting options:
 
                 .. code:: xml
 
-                    to="..."
+                    value="..."
 
                 * Required
 
@@ -623,6 +626,7 @@ The search pattern is set in resources section.
 
 Specifies an alternative file for filemagic, containing mime type information.
 
+.. _autoscan:
 
 ``autoscan``
 ~~~~~~~~~~~~
@@ -755,6 +759,19 @@ the removed directory if it becomes available/gets created again.
         before the directory or file is fully available, causing an access
         permission error and the import fails.
         This attribute is only available in config.xml at the moment.
+
+        .. code:: xml
+
+            force-reread-unknown="yes|no"
+
+        * Optional
+
+        * Default: **no**
+
+        This attribute forces that files without changes are reread (on startup) if their upnp class is unset or "object.item".
+        This can happen if the first scan (e.g. via inotify) did not get all details of the file correctly.
+        This is mostly the case if the media folder is exported on the network and files are written via network.
+        Be aware that the startup will take longer if there is a large number of non-media files in the folder
 
         .. code:: xml
 
@@ -1292,7 +1309,7 @@ expanded to `if genre contains Book`.
 * Optional
 * Extensible Default
 
-This section holds the mime type to dlna transfer mode mappings. It is added to the http-header ``transferMode.dlna.org``` of the file request.
+This section holds the mime type to dlna transfer mode mappings. It is added to the http-header ``transferMode.dlna.org`` of the file request.
 
 
 **Child tags:**
@@ -1304,7 +1321,7 @@ This section holds the mime type to dlna transfer mode mappings. It is added to 
 
      <map from="audio/*" to="Streaming"/>
      <map from="video/*" to="Streaming"/>
-     <map from="image/*" to="Interative"/>
+     <map from="image/*" to="Interactive"/>
      <map from="text/*" to="Background"/>
 
 * Optional
@@ -1618,12 +1635,36 @@ Metadata can be read by the import javascript as ``meta`` to gain more control o
 .. code-block:: xml
 
     <add-data tag="tag3" key="upnp:Key"/>
-    ...
 
 * Optional
 
 If the library was able to extract the data according to the given keyword, it will be added to metadata.
 The attribute ``key`` sets the UPnP meta property and is only accepted inside a ``metadata`` element.
+
+``comment``
+-----------
+
+.. code-block:: xml
+
+    <comment enabled="yes"> ... </comment>
+
+* Optional
+
+Fabricate a comment (description) from metadata. The comment will only be created if there is no description set and in the mechanism is ``enabled``.
+
+**Child tags:**
+
+``add-comment``
+^^^^^^^^^^^^^^^
+
+.. code-block:: xml
+
+    <add-comment label="My favourite Detail" tag="MEDIA_TAG"/>
+
+* Optional
+
+If the library was able to extract the data according to the given tag, it will be added to the comment.
+The attribute ``tag`` sets the media property and the ``label`` contains the text to add the the comment.
 
 
 **Library sections:**

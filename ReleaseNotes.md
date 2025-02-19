@@ -2,15 +2,31 @@
 
 ## HEAD
 
-Changed default for layout to "js" if built with JavaScript support.
+Changed default for layout to `js` if built with JavaScript support.
+
+### NEW Features
+
+- All configuration options for autoscan directories are available in the web UI now, including scripts and storage in the database.
+- New configuration option for autoscan directories to rescan files that ended up as plain object in the first run.
+- Several script options to control audio layout
+- Harmonisation of metadata handling for wavpack and matroska media handlers
+- Fabricated comment on import in media handlers (incl. configuration)
+- Resource attribute `pixelFormat` for videos.
+- Additional Resources (thumbnail, subtitle) for External Urls
+- New UI command "Scan Now" and minor improvement
 
 ### FIXES
 
-- Album art in builtin layout
+- Album art and structure in builtin layout
+- Autoscan objects in scripts
+- Metadata in builtin layout, album artist in default js layout
+- Commands in UI show descriptive tooltips
+- Child items of autoscan folder in UI
 
 ### Code Improvements
 
 - Removed static from ConfigDefinition
+- Update versions of pugixml (1.15), libexif (v0.6.25), wavpack (5.8.1), fmt (11.1.3), spdlog (1.15.1), wavpack (1.8.1), googletest (1.16.0), libexiv2 (0.28.4)
 
 ## 2.4.1
 

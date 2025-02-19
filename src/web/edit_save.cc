@@ -39,14 +39,16 @@
 #include "util/tools.h"
 #include "util/xml_to_json.h"
 
-void Web::EditSave::process()
-{
-    checkRequest();
+const std::string Web::EditSave::PAGE = "edit_save";
 
+void Web::EditSave::processPageAction(pugi::xml_node& element)
+{
     std::string objID = param("object_id");
     if (objID.empty())
         throw_std_runtime_error("invalid object id");
 
     int objectID = std::stoi(objID);
-    content->updateObject(objectID, params);
+    auto object = content->updateObject(objectID, params);
+    if (readResources(object))
+        content->updateObject(object, true);
 }

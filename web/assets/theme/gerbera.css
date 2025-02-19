@@ -940,6 +940,7 @@ body,
 
 #autoscan-persistent-msg {
   background-color: #e9ecef;
+  background-color: light-dark(#e9ecef, #151a1e);
   padding: 10px;
   margin-right: 0.15em;
 }
@@ -949,8 +950,23 @@ body,
   background-color: darkorange;
 }
 
+.itemDetailHead {
+  cursor: pointer;
+  background-color: light-dark(var(--light-bg-form), var(--dark-bg-form));
+}
+
+.itemDetailFoot {
+  font-weight: bold;
+  background-color: light-dark(var(--light-bg-form), var(--dark-bg-form));
+}
+
 .autoscan-child {
-  background-color: #e9ecef;
+  background-color: transparent;
+  color: light-dark(var(--light-text), var(--dark-text)) !important;
+}
+.autoscan-child:hover {
+  background-color: transparent !important;
+  color: light-dark(var(--light-text), var(--dark-text)) !important;
 }
 
 .badge {

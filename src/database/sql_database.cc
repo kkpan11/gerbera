@@ -164,6 +164,9 @@ enum class AutoscanColumn {
     LastModified,
     Persistent,
     Location,
+    RetryCount,
+    DirTypes,
+    ForceRescan,
     ObjLocation,
 };
 
@@ -200,7 +203,7 @@ static const std::map<BrowseCol, SearchProperty> browseColMap {
     { BrowseCol::RefAuxdata, { REF_ALIAS, "auxdata" } },
     { BrowseCol::RefMimeType, { REF_ALIAS, "mime_type" } },
     { BrowseCol::RefServiceId, { REF_ALIAS, "service_id" } },
-    { BrowseCol::AsPersistent, { AUS_ALIAS, "persistent" } },
+    { BrowseCol::AsPersistent, { AUS_ALIAS, "persistent", FieldType::Bool } },
 };
 
 /// \brief Map search column ids to column names
@@ -243,7 +246,7 @@ static const std::map<AutoscanColumn, SearchProperty> autoscanColMap {
     { AutoscanColumn::Id, { AUS_ALIAS, "id" } },
     { AutoscanColumn::ObjId, { AUS_ALIAS, "obj_id" } },
     { AutoscanColumn::ScanMode, { AUS_ALIAS, "scan_mode" } },
-    { AutoscanColumn::Recursive, { AUS_ALIAS, "recursive" } },
+    { AutoscanColumn::Recursive, { AUS_ALIAS, "recursive", FieldType::Bool } },
     { AutoscanColumn::MediaType, { AUS_ALIAS, "media_type" } },
     { AutoscanColumn::CtAudio, { AUS_ALIAS, "ct_audio" } },
     { AutoscanColumn::CtImage, { AUS_ALIAS, "ct_image" } },
@@ -252,8 +255,11 @@ static const std::map<AutoscanColumn, SearchProperty> autoscanColMap {
     { AutoscanColumn::FollowSymlinks, { AUS_ALIAS, "follow_symlinks", FieldType::Integer } },
     { AutoscanColumn::Interval, { AUS_ALIAS, "interval", FieldType::Integer } },
     { AutoscanColumn::LastModified, { AUS_ALIAS, "last_modified", FieldType::Date } },
-    { AutoscanColumn::Persistent, { AUS_ALIAS, "persistent" } },
+    { AutoscanColumn::Persistent, { AUS_ALIAS, "persistent", FieldType::Bool } },
     { AutoscanColumn::Location, { AUS_ALIAS, "location" } },
+    { AutoscanColumn::RetryCount, { AUS_ALIAS, "retry_count", FieldType::Integer } },
+    { AutoscanColumn::DirTypes, { AUS_ALIAS, "dir_types", FieldType::Bool } },
+    { AutoscanColumn::ForceRescan, { AUS_ALIAS, "force_rescan", FieldType::Bool } },
     { AutoscanColumn::ObjLocation, { ITM_ALIAS, "location" } },
 };
 
@@ -299,6 +305,9 @@ static const std::vector<std::pair<std::string, AutoscanColumn>> autoscanTagMap 
     { "last_modified", AutoscanColumn::LastModified },
     { "persistent", AutoscanColumn::Persistent },
     { "location", AutoscanColumn::Location },
+    { "retry_count", AutoscanColumn::RetryCount },
+    { "dir_types", AutoscanColumn::DirTypes },
+    { "force_rescan", AutoscanColumn::ForceRescan },
     { "obj_location", AutoscanColumn::ObjLocation },
 };
 
@@ -1450,7 +1459,11 @@ int SQLDatabase::ensurePathExistence(const fs::path& path, int* changedContainer
     itemMetadata.emplace_back(MetaEnumMapper::getMetaFieldName(MetadataFields::M_DATE), fmt::format("{:%FT%T%z}", fmt::localtime(toSeconds(fs::last_write_time(path)).count())));
 
     auto f2i = converterManager->f2i();
-    return createContainer(parentID, f2i->convert(path.filename()), path, OBJECT_FLAG_RESTRICTED, false, "", INVALID_OBJECT_ID, itemMetadata);
+    auto [mval, err] = f2i->convert(path.filename());
+    if (!err.empty()) {
+        log_warning("{}: {}", path.filename().string(), err);
+    }
+    return createContainer(parentID, mval, path, OBJECT_FLAG_RESTRICTED, false, "", INVALID_OBJECT_ID, itemMetadata);
 }
 
 int SQLDatabase::createContainer(int parentID, const std::string& name, const std::string& virtualPath, int flags, bool isVirtual, const std::string& upnpClass, int refID, const std::vector<std::pair<std::string, std::string>>& itemMetadata, const std::vector<std::shared_ptr<CdsResource>>& itemResources)
@@ -1717,11 +1730,11 @@ std::shared_ptr<CdsObject> SQLDatabase::createObjectFromRow(const std::string& g
         std::string autoscanPersistent = getCol(row, BrowseCol::AsPersistent);
         if (!autoscanPersistent.empty()) {
             if (remapBool(autoscanPersistent))
-                cont->setAutoscanType(OBJECT_AUTOSCAN_CFG);
+                cont->setAutoscanType(AutoscanType::Config);
             else
-                cont->setAutoscanType(OBJECT_AUTOSCAN_UI);
+                cont->setAutoscanType(AutoscanType::Ui);
         } else
-            cont->setAutoscanType(OBJECT_AUTOSCAN_NONE);
+            cont->setAutoscanType(AutoscanType::None);
         matchedType = true;
     } else if (obj->isItem()) {
         if (!resourceZeroOk)
@@ -2121,7 +2134,8 @@ std::unique_ptr<Database::ChangedContainers> SQLDatabase::removeObject(int objec
 }
 
 Database::ChangedContainers SQLDatabase::_recursiveRemove(
-    const std::vector<std::int32_t>& items, const std::vector<std::int32_t>& containers,
+    const std::vector<std::int32_t>& items,
+    const std::vector<std::int32_t>& containers,
     bool all)
 {
     log_debug("start");
@@ -2699,6 +2713,9 @@ std::shared_ptr<AutoscanDirectory> SQLDatabase::_fillAutoscanDirectory(const std
     bool hidden = remapBool(getCol(row, AutoscanColumn::Hidden));
     bool followSymlinks = remapBool(getCol(row, AutoscanColumn::FollowSymlinks));
     bool persistent = remapBool(getCol(row, AutoscanColumn::Persistent));
+    int retryCount = getColInt(row, AutoscanColumn::RetryCount, 0);
+    bool dirTypes = remapBool(getCol(row, AutoscanColumn::DirTypes));
+    bool forceRescan = remapBool(getCol(row, AutoscanColumn::ForceRescan));
     auto containerMap = AutoscanDirectory::ContainerTypesDefaults;
     containerMap[AutoscanMediaMode::Audio] = getCol(row, AutoscanColumn::CtAudio);
     containerMap[AutoscanMediaMode::Image] = getCol(row, AutoscanColumn::CtImage);
@@ -2713,6 +2730,9 @@ std::shared_ptr<AutoscanDirectory> SQLDatabase::_fillAutoscanDirectory(const std
     auto dir = std::make_shared<AutoscanDirectory>(location, mode, recursive, persistent, interval, hidden, followSymlinks, mt, containerMap);
     dir->setObjectID(objectID);
     dir->setDatabaseID(databaseID);
+    dir->setRetryCount(retryCount);
+    dir->setDirTypes(dirTypes);
+    dir->setForceRescan(forceRescan);
     dir->setCurrentLMT("", lastModified);
     if (lastModified > std::chrono::seconds::zero()) {
         dir->setCurrentLMT(location, lastModified);
@@ -2749,6 +2769,9 @@ void SQLDatabase::addAutoscanDirectory(const std::shared_ptr<AutoscanDirectory>&
         identifier("last_modified"),
         identifier("persistent"),
         identifier("location"),
+        identifier("retry_count"),
+        identifier("dir_types"),
+        identifier("force_rescan"),
         identifier("path_ids"),
     };
     auto values = std::vector {
@@ -2765,6 +2788,9 @@ void SQLDatabase::addAutoscanDirectory(const std::shared_ptr<AutoscanDirectory>&
         quote(adir->getPreviousLMT().count()),
         quote(adir->persistent()),
         objectID >= 0 ? SQL_NULL : quote(adir->getLocation()),
+        quote(adir->getRetryCount()),
+        quote(adir->hasDirTypes()),
+        quote(adir->getForceRescan()),
         pathIds.empty() ? SQL_NULL : quote(fmt::format(",{},", fmt::join(pathIds, ","))),
     };
     adir->setDatabaseID(insert(AUTOSCAN_TABLE, fields, values, true));
@@ -2799,6 +2825,9 @@ void SQLDatabase::updateAutoscanDirectory(const std::shared_ptr<AutoscanDirector
         ColumnUpdate(identifier("persistent"), quote(adir->persistent())),
         ColumnUpdate(identifier("location"), objectID >= 0 ? SQL_NULL : quote(adir->getLocation())),
         ColumnUpdate(identifier("path_ids"), pathIds.empty() ? SQL_NULL : quote(fmt::format(",{},", fmt::join(pathIds, ",")))),
+        ColumnUpdate(identifier("retry_count"), quote(adir->getRetryCount())),
+        ColumnUpdate(identifier("dir_types"), quote(adir->hasDirTypes())),
+        ColumnUpdate(identifier("force_rescan"), quote(adir->getForceRescan())),
         ColumnUpdate(identifier("touched"), quote(true)),
     };
     if (adir->getPreviousLMT() > std::chrono::seconds::zero()) {
@@ -2814,8 +2843,10 @@ void SQLDatabase::removeAutoscanDirectory(const std::shared_ptr<AutoscanDirector
 
 void SQLDatabase::_removeAutoscanDirectory(int autoscanID)
 {
-    if (autoscanID == INVALID_OBJECT_ID)
+    if (autoscanID == INVALID_OBJECT_ID) {
+        log_warning("cannot delete autoscan with illegal ID");
         return;
+    }
     int objectID = _getAutoscanObjectID(autoscanID);
     deleteRow(AUTOSCAN_TABLE, "id", autoscanID);
     if (objectID != INVALID_OBJECT_ID)
@@ -2837,9 +2868,10 @@ int SQLDatabase::_getAutoscanObjectID(int autoscanID)
 
 void SQLDatabase::_autoscanChangePersistentFlag(int objectID, bool persistent)
 {
-    if (objectID == INVALID_OBJECT_ID)
+    if (objectID == INVALID_OBJECT_ID) {
+        log_warning("cannot change autoscan with illegal ID");
         return;
-
+    }
     exec(fmt::format("UPDATE {0}{2}{1} SET {0}flags{1} = ({0}flags{1} {3}{4}) WHERE {0}id{1} = {5}", table_quote_begin, table_quote_end, CDS_OBJECT_TABLE, (persistent ? " | " : " & ~"), OBJECT_FLAG_PERSISTENT_CONTAINER, objectID));
 }
 
@@ -2853,8 +2885,10 @@ std::vector<int> SQLDatabase::_checkOverlappingAutoscans(const std::shared_ptr<A
     if (!adir)
         throw DatabaseException("_checkOverlappingAutoscans called with adir==nullptr", LINE_MESSAGE);
     int checkObjectID = adir->getObjectID();
-    if (checkObjectID == INVALID_OBJECT_ID)
+    if (checkObjectID == INVALID_OBJECT_ID) {
+        log_warning("cannot check autoscan with illegal ID");
         return {};
+    }
     int databaseID = adir->getDatabaseID();
 
     std::unique_ptr<SQLRow> row;

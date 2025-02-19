@@ -445,6 +445,14 @@ static const std::map<std::string, std::string> upnpContainerDefaultPropDefaults
     { "upnp:storageUsed", "0" },
 };
 
+/// \brief default values for ConfigVal::IMPORT_LIBOPTS_EXIV2_COMMENT_LIST
+static const std::map<std::string, std::string> exiv2CommentDefaults {
+    { "Taken with", "Exif.Image.Model" },
+    { "Flash setting", "Exif.Photo.Flash" },
+    { "Focal length", "Exif.Photo.FocalLength" },
+    { "Focal length 35 mm equivalent", "Exif.Photo.FocalLengthIn35mmFilm" },
+};
+
 std::vector<std::shared_ptr<ConfigSetup>> ConfigDefinition::getServerOptions()
 {
     return {
@@ -598,6 +606,9 @@ std::vector<std::shared_ptr<ConfigSetup>> ConfigDefinition::getServerOptions()
         std::make_shared<ConfigPathSetup>(ConfigVal::SERVER_STORAGE_SQLITE_UPGRADE_FILE,
             "/server/storage/sqlite3/upgrade-file", "config-server.html#storage",
             "", ConfigPathArguments::isFile | ConfigPathArguments::mustExist | ConfigPathArguments::resolveEmpty),
+        std::make_shared<ConfigIntSetup>(ConfigVal::SERVER_STORAGE_SQLITE_SHUTDOWN_ATTEMPTS,
+            "/server/storage/sqlite3/attribute::shutdown-attempts", "config-server.html#storage",
+            5, 2, ConfigIntSetup::CheckMinValue),
 
         // Web User Interface
         std::make_shared<ConfigBoolSetup>(ConfigVal::SERVER_UI_ENABLED,
@@ -1292,6 +1303,9 @@ std::vector<std::shared_ptr<ConfigSetup>> ConfigDefinition::getImportOptions()
             0),
         std::make_shared<ConfigStringSetup>(ConfigVal::A_AUTOSCAN_DIRECTORY_LMT,
             "attribute::last-modified", "config-import.html#autoscan"),
+        std::make_shared<ConfigBoolSetup>(ConfigVal::A_AUTOSCAN_DIRECTORY_FORCE_REREAD_UNKNOWN,
+            "attribute::force-reread-unknown", "config-import.html#autoscan",
+            NO),
 
         // Directory Tweaks
         std::make_shared<ConfigDirectorySetup>(ConfigVal::IMPORT_DIRECTORIES_LIST,
@@ -1381,6 +1395,12 @@ std::vector<std::shared_ptr<ConfigSetup>> ConfigDefinition::getImportOptions()
         std::make_shared<ConfigStringSetup>(ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_KEY,
             "attribute::key", "config-import.html#auxdata",
             ""),
+        std::make_shared<ConfigStringSetup>(ConfigVal::A_IMPORT_LIBOPTS_COMMENT_TAG,
+            "attribute::tag", "config-import.html#comment",
+            ""),
+        std::make_shared<ConfigStringSetup>(ConfigVal::A_IMPORT_LIBOPTS_COMMENT_LABEL,
+            "attribute::label", "config-import.html#comment",
+            ""),
         std::make_shared<ConfigStringSetup>(ConfigVal::A_SERVER_UI_ACCOUNT_LIST_PASSWORD,
             "attribute::password", "config-server.html#ui",
             ""),
@@ -1394,12 +1414,17 @@ std::vector<std::shared_ptr<ConfigSetup>> ConfigDefinition::getLibraryOptions()
 {
     return {
 #ifdef HAVE_LIBEXIF
+        // options for libexif
         std::make_shared<ConfigArraySetup>(ConfigVal::IMPORT_LIBOPTS_EXIF_AUXDATA_TAGS_LIST,
             "/import/library-options/libexif/auxdata", "config-import.html#libexif",
-            ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_DATA, ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_TAG, false, false),
+            ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_DATA,
+            ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_TAG,
+            false, false),
         std::make_shared<ConfigDictionarySetup>(ConfigVal::IMPORT_LIBOPTS_EXIF_METADATA_TAGS_LIST,
             "/import/library-options/libexif/metadata", "config-import.html#libexif",
-            ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_DATA, ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_TAG, ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_KEY,
+            ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_DATA,
+            ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_TAG,
+            ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_KEY,
             false, true, false),
         std::make_shared<ConfigStringSetup>(ConfigVal::IMPORT_LIBOPTS_EXIF_CHARSET,
             "/import/library-options/libexif/attribute::charset", "config-import.html#charset",
@@ -1407,14 +1432,28 @@ std::vector<std::shared_ptr<ConfigSetup>> ConfigDefinition::getLibraryOptions()
         std::make_shared<ConfigBoolSetup>(ConfigVal::IMPORT_LIBOPTS_EXIF_ENABLED,
             "/import/library-options/libexif/attribute::enabled", "config-import.html#enabled",
             YES),
+        std::make_shared<ConfigBoolSetup>(ConfigVal::IMPORT_LIBOPTS_EXIF_COMMENT_ENABLED,
+            "/import/library-options/libexif/comment/attribute::enabled", "config-import.html#comment",
+            NO),
+        std::make_shared<ConfigDictionarySetup>(ConfigVal::IMPORT_LIBOPTS_EXIF_COMMENT_LIST,
+            "/import/library-options/libexif/comment", "config-import.html#libexif",
+            ConfigVal::A_IMPORT_LIBOPTS_COMMENT_DATA,
+            ConfigVal::A_IMPORT_LIBOPTS_COMMENT_LABEL,
+            ConfigVal::A_IMPORT_LIBOPTS_COMMENT_TAG,
+            false, false, false),
 #endif
 #ifdef HAVE_EXIV2
+        // options for exiv2
         std::make_shared<ConfigArraySetup>(ConfigVal::IMPORT_LIBOPTS_EXIV2_AUXDATA_TAGS_LIST,
             "/import/library-options/exiv2/auxdata", "config-import.html#exiv2",
-            ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_DATA, ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_TAG, false, false),
+            ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_DATA,
+            ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_TAG,
+            false, false),
         std::make_shared<ConfigDictionarySetup>(ConfigVal::IMPORT_LIBOPTS_EXIV2_METADATA_TAGS_LIST,
             "/import/library-options/exiv2/metadata", "config-import.html#exiv2",
-            ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_DATA, ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_TAG, ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_KEY,
+            ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_DATA,
+            ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_TAG,
+            ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_KEY,
             false, true, false),
         std::make_shared<ConfigStringSetup>(ConfigVal::IMPORT_LIBOPTS_EXIV2_CHARSET,
             "/import/library-options/exiv2/attribute::charset", "config-import.html#charset",
@@ -1422,14 +1461,28 @@ std::vector<std::shared_ptr<ConfigSetup>> ConfigDefinition::getLibraryOptions()
         std::make_shared<ConfigBoolSetup>(ConfigVal::IMPORT_LIBOPTS_EXIV2_ENABLED,
             "/import/library-options/exiv2/attribute::enabled", "config-import.html#enabled",
             YES),
+        std::make_shared<ConfigBoolSetup>(ConfigVal::IMPORT_LIBOPTS_EXIV2_COMMENT_ENABLED,
+            "/import/library-options/exiv2/comment/attribute::enabled", "config-import.html#comment",
+            YES),
+        std::make_shared<ConfigDictionarySetup>(ConfigVal::IMPORT_LIBOPTS_EXIV2_COMMENT_LIST,
+            "/import/library-options/exiv2/comment", "config-import.html#exiv2",
+            ConfigVal::A_IMPORT_LIBOPTS_COMMENT_DATA,
+            ConfigVal::A_IMPORT_LIBOPTS_COMMENT_LABEL,
+            ConfigVal::A_IMPORT_LIBOPTS_COMMENT_TAG,
+            false, false, false, exiv2CommentDefaults),
 #endif
 #ifdef HAVE_TAGLIB
+        // options for taglib (id3)
         std::make_shared<ConfigArraySetup>(ConfigVal::IMPORT_LIBOPTS_ID3_AUXDATA_TAGS_LIST,
             "/import/library-options/id3/auxdata", "config-import.html#id3",
-            ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_DATA, ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_TAG, false, false),
+            ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_DATA,
+            ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_TAG,
+            false, false),
         std::make_shared<ConfigDictionarySetup>(ConfigVal::IMPORT_LIBOPTS_ID3_METADATA_TAGS_LIST,
             "/import/library-options/id3/metadata", "config-import.html#id3",
-            ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_DATA, ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_TAG, ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_KEY,
+            ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_DATA,
+            ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_TAG,
+            ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_KEY,
             false, true, false, id3SpecialPropertyMap),
         std::make_shared<ConfigStringSetup>(ConfigVal::IMPORT_LIBOPTS_ID3_CHARSET,
             "/import/library-options/id3/attribute::charset", "config-import.html#charset",
@@ -1437,14 +1490,28 @@ std::vector<std::shared_ptr<ConfigSetup>> ConfigDefinition::getLibraryOptions()
         std::make_shared<ConfigBoolSetup>(ConfigVal::IMPORT_LIBOPTS_ID3_ENABLED,
             "/import/library-options/id3/attribute::enabled", "config-import.html#enabled",
             YES),
+        std::make_shared<ConfigBoolSetup>(ConfigVal::IMPORT_LIBOPTS_ID3_COMMENT_ENABLED,
+            "/import/library-options/id3/comment/attribute::enabled", "config-import.html#comment",
+            NO),
+        std::make_shared<ConfigDictionarySetup>(ConfigVal::IMPORT_LIBOPTS_ID3_COMMENT_LIST,
+            "/import/library-options/id3/comment", "config-import.html#id3",
+            ConfigVal::A_IMPORT_LIBOPTS_COMMENT_DATA,
+            ConfigVal::A_IMPORT_LIBOPTS_COMMENT_LABEL,
+            ConfigVal::A_IMPORT_LIBOPTS_COMMENT_TAG,
+            false, false, false),
 #endif
 #ifdef HAVE_FFMPEG
+        // options for ffmpeg (libav)
         std::make_shared<ConfigArraySetup>(ConfigVal::IMPORT_LIBOPTS_FFMPEG_AUXDATA_TAGS_LIST,
             "/import/library-options/ffmpeg/auxdata", "config-import.html#ffmpeg",
-            ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_DATA, ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_TAG, false, false),
+            ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_DATA,
+            ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_TAG,
+            false, false),
         std::make_shared<ConfigDictionarySetup>(ConfigVal::IMPORT_LIBOPTS_FFMPEG_METADATA_TAGS_LIST,
             "/import/library-options/ffmpeg/metadata", "config-import.html#ffmpeg",
-            ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_DATA, ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_TAG, ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_KEY,
+            ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_DATA,
+            ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_TAG,
+            ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_KEY,
             false, true, false, ffmpegSpecialPropertyMap),
         std::make_shared<ConfigStringSetup>(ConfigVal::IMPORT_LIBOPTS_FFMPEG_CHARSET,
             "/import/library-options/ffmpeg/attribute::charset", "config-import.html#charset",
@@ -1452,22 +1519,73 @@ std::vector<std::shared_ptr<ConfigSetup>> ConfigDefinition::getLibraryOptions()
         std::make_shared<ConfigBoolSetup>(ConfigVal::IMPORT_LIBOPTS_FFMPEG_ENABLED,
             "/import/library-options/ffmpeg/attribute::enabled", "config-import.html#enabled",
             YES),
+        std::make_shared<ConfigBoolSetup>(ConfigVal::IMPORT_LIBOPTS_FFMPEG_COMMENT_ENABLED,
+            "/import/library-options/ffmpeg/comment/attribute::enabled", "config-import.html#comment",
+            NO),
+        std::make_shared<ConfigDictionarySetup>(ConfigVal::IMPORT_LIBOPTS_FFMPEG_COMMENT_LIST,
+            "/import/library-options/ffmpeg/comment", "config-import.html#ffmpeg",
+            ConfigVal::A_IMPORT_LIBOPTS_COMMENT_DATA,
+            ConfigVal::A_IMPORT_LIBOPTS_COMMENT_LABEL,
+            ConfigVal::A_IMPORT_LIBOPTS_COMMENT_TAG,
+            false, false, false),
 #endif
 #ifdef HAVE_MATROSKA
+        // options for matroska (mkv)
+        std::make_shared<ConfigArraySetup>(ConfigVal::IMPORT_LIBOPTS_MKV_AUXDATA_TAGS_LIST,
+            "/import/library-options/mkv/auxdata", "config-import.html#mkv",
+            ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_DATA,
+            ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_TAG,
+            false, false),
+        std::make_shared<ConfigDictionarySetup>(ConfigVal::IMPORT_LIBOPTS_MKV_METADATA_TAGS_LIST,
+            "/import/library-options/mkv/metadata", "config-import.html#mkv",
+            ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_DATA,
+            ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_TAG,
+            ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_KEY,
+            false, true, false),
         std::make_shared<ConfigStringSetup>(ConfigVal::IMPORT_LIBOPTS_MKV_CHARSET,
             "/import/library-options/mkv/attribute::charset", "config-import.html#charset",
             ""),
         std::make_shared<ConfigBoolSetup>(ConfigVal::IMPORT_LIBOPTS_MKV_ENABLED,
             "/import/library-options/mkv/attribute::enabled", "config-import.html#enabled",
             YES),
+        std::make_shared<ConfigBoolSetup>(ConfigVal::IMPORT_LIBOPTS_MKV_COMMENT_ENABLED,
+            "/import/library-options/mkv/comment/attribute::enabled", "config-import.html#comment",
+            NO),
+        std::make_shared<ConfigDictionarySetup>(ConfigVal::IMPORT_LIBOPTS_MKV_COMMENT_LIST,
+            "/import/library-options/mkv/comment", "config-import.html#mkv",
+            ConfigVal::A_IMPORT_LIBOPTS_COMMENT_DATA,
+            ConfigVal::A_IMPORT_LIBOPTS_COMMENT_LABEL,
+            ConfigVal::A_IMPORT_LIBOPTS_COMMENT_TAG,
+            false, false, false),
 #endif
 #ifdef HAVE_WAVPACK
-        std::make_shared<ConfigStringSetup>(ConfigVal::IMPORT_LIBOPTS_WVC_CHARSET,
+        // options for wavpack
+        std::make_shared<ConfigArraySetup>(ConfigVal::IMPORT_LIBOPTS_WAVPACK_AUXDATA_TAGS_LIST,
+            "/import/library-options/wavpack/auxdata", "config-import.html#wavpack",
+            ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_DATA,
+            ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_TAG,
+            false, false),
+        std::make_shared<ConfigDictionarySetup>(ConfigVal::IMPORT_LIBOPTS_WAVPACK_METADATA_TAGS_LIST,
+            "/import/library-options/wavpack/metadata", "config-import.html#wavpack",
+            ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_DATA,
+            ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_TAG,
+            ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_KEY,
+            false, true, false),
+        std::make_shared<ConfigStringSetup>(ConfigVal::IMPORT_LIBOPTS_WAVPACK_CHARSET,
             "/import/library-options/wavpack/attribute::charset", "config-import.html#charset",
             ""),
-        std::make_shared<ConfigBoolSetup>(ConfigVal::IMPORT_LIBOPTS_WVC_ENABLED,
+        std::make_shared<ConfigBoolSetup>(ConfigVal::IMPORT_LIBOPTS_WAVPACK_ENABLED,
             "/import/library-options/wavpack/attribute::enabled", "config-import.html#enabled",
             YES),
+        std::make_shared<ConfigBoolSetup>(ConfigVal::IMPORT_LIBOPTS_WAVPACK_COMMENT_ENABLED,
+            "/import/library-options/wavpack/comment/attribute::enabled", "config-import.html#comment",
+            NO),
+        std::make_shared<ConfigDictionarySetup>(ConfigVal::IMPORT_LIBOPTS_WAVPACK_COMMENT_LIST,
+            "/import/library-options/wavpack/comment", "config-import.html#wavpack",
+            ConfigVal::A_IMPORT_LIBOPTS_COMMENT_DATA,
+            ConfigVal::A_IMPORT_LIBOPTS_COMMENT_LABEL,
+            ConfigVal::A_IMPORT_LIBOPTS_COMMENT_TAG,
+            false, false, false),
 #endif
 #ifdef HAVE_MAGIC
         std::make_shared<ConfigPathSetup>(ConfigVal::IMPORT_MAGIC_FILE,
@@ -1649,6 +1767,8 @@ std::vector<std::shared_ptr<ConfigSetup>> ConfigDefinition::getSimpleOptions()
             "add-dir", ""),
         std::make_shared<ConfigSetup>(ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_DATA,
             "add-data", ""),
+        std::make_shared<ConfigSetup>(ConfigVal::A_IMPORT_LIBOPTS_COMMENT_DATA,
+            "add-comment", ""),
         std::make_shared<ConfigSetup>(ConfigVal::A_TRANSCODING_MIMETYPE_PROF_MAP_TRANSCODE,
             "transcode", ""),
         std::make_shared<ConfigSetup>(ConfigVal::A_IMPORT_LAYOUT_MAPPING_PATH,
@@ -1784,6 +1904,92 @@ void ConfigDefinition::initHierarchy()
         { ConfigVal::A_IMPORT_MAPPINGS_M2CTYPE_LIST_MIMETYPE, { ConfigVal::IMPORT_MAPPINGS_MIMETYPE_TO_CONTENTTYPE_LIST, ConfigVal::IMPORT_MAPPINGS_CONTENTTYPE_TO_DLNAPROFILE_LIST } },
         { ConfigVal::A_IMPORT_MAPPINGS_M2CTYPE_LIST_TREAT, { ConfigVal::IMPORT_MAPPINGS_MIMETYPE_TO_CONTENTTYPE_LIST, ConfigVal::IMPORT_MAPPINGS_CONTENTTYPE_TO_DLNAPROFILE_LIST } },
         { ConfigVal::A_IMPORT_MAPPINGS_M2CTYPE_LIST_AS, { ConfigVal::IMPORT_MAPPINGS_MIMETYPE_TO_CONTENTTYPE_LIST, ConfigVal::IMPORT_MAPPINGS_CONTENTTYPE_TO_DLNAPROFILE_LIST } },
+        { ConfigVal::A_IMPORT_LIBOPTS_COMMENT_LABEL, {
+#ifdef HAVE_LIBEXIF
+                                                         ConfigVal::IMPORT_LIBOPTS_EXIF_COMMENT_LIST,
+#endif
+#ifdef HAVE_EXIV2
+                                                         ConfigVal::IMPORT_LIBOPTS_EXIV2_COMMENT_LIST,
+#endif
+#ifdef HAVE_TAGLIB
+                                                         ConfigVal::IMPORT_LIBOPTS_ID3_COMMENT_LIST,
+#endif
+#ifdef HAVE_FFMPEG
+                                                         ConfigVal::IMPORT_LIBOPTS_FFMPEG_COMMENT_LIST,
+#endif
+#ifdef HAVE_MATROSKA
+                                                         ConfigVal::IMPORT_LIBOPTS_MKV_COMMENT_LIST,
+#endif
+#ifdef HAVE_WAVPACK
+                                                         ConfigVal::IMPORT_LIBOPTS_WAVPACK_COMMENT_LIST,
+#endif
+                                                     } },
+        { ConfigVal::A_IMPORT_LIBOPTS_COMMENT_TAG, {
+#ifdef HAVE_LIBEXIF
+                                                       ConfigVal::IMPORT_LIBOPTS_EXIF_COMMENT_LIST,
+#endif
+#ifdef HAVE_EXIV2
+                                                       ConfigVal::IMPORT_LIBOPTS_EXIV2_COMMENT_LIST,
+#endif
+#ifdef HAVE_TAGLIB
+                                                       ConfigVal::IMPORT_LIBOPTS_ID3_COMMENT_LIST,
+#endif
+#ifdef HAVE_FFMPEG
+                                                       ConfigVal::IMPORT_LIBOPTS_FFMPEG_COMMENT_LIST,
+#endif
+#ifdef HAVE_MATROSKA
+                                                       ConfigVal::IMPORT_LIBOPTS_MKV_COMMENT_LIST,
+#endif
+#ifdef HAVE_WAVPACK
+                                                       ConfigVal::IMPORT_LIBOPTS_WAVPACK_COMMENT_LIST,
+#endif
+                                                   } },
+        { ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_TAG, {
+#ifdef HAVE_LIBEXIF
+                                                       ConfigVal::IMPORT_LIBOPTS_EXIF_METADATA_TAGS_LIST,
+                                                       ConfigVal::IMPORT_LIBOPTS_EXIF_AUXDATA_TAGS_LIST,
+#endif
+#ifdef HAVE_EXIV2
+                                                       ConfigVal::IMPORT_LIBOPTS_EXIV2_METADATA_TAGS_LIST,
+                                                       ConfigVal::IMPORT_LIBOPTS_EXIV2_AUXDATA_TAGS_LIST,
+#endif
+#ifdef HAVE_TAGLIB
+                                                       ConfigVal::IMPORT_LIBOPTS_ID3_METADATA_TAGS_LIST,
+                                                       ConfigVal::IMPORT_LIBOPTS_ID3_AUXDATA_TAGS_LIST,
+#endif
+#ifdef HAVE_FFMPEG
+                                                       ConfigVal::IMPORT_LIBOPTS_FFMPEG_METADATA_TAGS_LIST,
+                                                       ConfigVal::IMPORT_LIBOPTS_FFMPEG_AUXDATA_TAGS_LIST,
+#endif
+#ifdef HAVE_MATROSKA
+                                                       ConfigVal::IMPORT_LIBOPTS_MKV_METADATA_TAGS_LIST,
+                                                       ConfigVal::IMPORT_LIBOPTS_MKV_AUXDATA_TAGS_LIST,
+#endif
+#ifdef HAVE_WAVPACK
+                                                       ConfigVal::IMPORT_LIBOPTS_WAVPACK_METADATA_TAGS_LIST,
+                                                       ConfigVal::IMPORT_LIBOPTS_WAVPACK_AUXDATA_TAGS_LIST,
+#endif
+                                                   } },
+        { ConfigVal::A_IMPORT_LIBOPTS_AUXDATA_KEY, {
+#ifdef HAVE_LIBEXIF
+                                                       ConfigVal::IMPORT_LIBOPTS_EXIF_METADATA_TAGS_LIST,
+#endif
+#ifdef HAVE_EXIV2
+                                                       ConfigVal::IMPORT_LIBOPTS_EXIV2_METADATA_TAGS_LIST,
+#endif
+#ifdef HAVE_TAGLIB
+                                                       ConfigVal::IMPORT_LIBOPTS_ID3_METADATA_TAGS_LIST,
+#endif
+#ifdef HAVE_FFMPEG
+                                                       ConfigVal::IMPORT_LIBOPTS_FFMPEG_METADATA_TAGS_LIST,
+#endif
+#ifdef HAVE_MATROSKA
+                                                       ConfigVal::IMPORT_LIBOPTS_MKV_METADATA_TAGS_LIST,
+#endif
+#ifdef HAVE_WAVPACK
+                                                       ConfigVal::IMPORT_LIBOPTS_WAVPACK_METADATA_TAGS_LIST,
+#endif
+                                                   } },
         { ConfigVal::A_IMPORT_MAPPINGS_MIMETYPE_FROM, {
                                                           ConfigVal::IMPORT_MAPPINGS_EXTENSION_TO_MIMETYPE_LIST,
                                                           ConfigVal::IMPORT_MAPPINGS_MIMETYPE_TO_CONTENTTYPE_LIST,

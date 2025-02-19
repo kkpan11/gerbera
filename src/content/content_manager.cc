@@ -138,10 +138,11 @@ void ContentManager::run()
         }
         try {
             autoscanList->add(dir);
+        } catch (const std::logic_error& e) {
+            log_warning(e.what());
         } catch (const std::runtime_error& e) {
             // Work around existing config sourced autoscans that were stored to the DB for reasons
             log_warning(e.what());
-            continue;
         }
     }
 
@@ -149,20 +150,28 @@ void ContentManager::run()
     inotify = std::make_unique<AutoscanInotify>(self);
 
     if (config->getBoolOption(ConfigVal::IMPORT_AUTOSCAN_USE_INOTIFY)) {
-        auto db = database->getAutoscanList(AutoscanScanMode::INotify);
-        for (std::size_t i = 0; i < db->size(); i++) {
-            auto dir = db->get(i);
-            auto path = dir->getLocation();
-            if (fs::is_directory(path)) {
-                dir->setObjectID(ensurePathExistence(path));
+        try {
+            auto db = database->getAutoscanList(AutoscanScanMode::INotify);
+            for (std::size_t i = 0; i < db->size(); i++) {
+                auto dir = db->get(i);
+                auto path = dir->getLocation();
+                if (fs::is_directory(path)) {
+                    dir->setObjectID(ensurePathExistence(path));
+                }
+                try {
+                    dir->setInvalid();
+                    autoscanList->add(dir);
+                } catch (const std::logic_error& e) {
+                    log_warning(e.what());
+                } catch (const std::runtime_error& e) {
+                    // Work around existing config sourced autoscans that were stored to the DB for reasons
+                    log_warning(e.what());
+                }
             }
-            try {
-                autoscanList->add(dir);
-            } catch (const std::runtime_error& e) {
-                // Work around existing config sourced autoscans that were stored to the DB for reasons
-                log_warning(e.what());
-                continue;
-            }
+        } catch (const std::logic_error& e) {
+            log_warning(e.what());
+        } catch (const std::runtime_error& e) {
+            log_warning(e.what());
         }
         for (const auto& dir : config->getAutoscanListOption(ConfigVal::IMPORT_AUTOSCAN_INOTIFY_LIST)) {
             fs::path path = dir->getLocation();
@@ -171,10 +180,11 @@ void ContentManager::run()
             }
             try {
                 autoscanList->add(dir);
+            } catch (const std::logic_error& e) {
+                log_warning(e.what());
             } catch (const std::runtime_error& e) {
                 // Work around existing config sourced autoscans that were stored to the DB for reasons
                 log_warning(e.what());
-                continue;
             }
         }
     }
@@ -416,7 +426,11 @@ void ContentManager::parseMetafile(const std::shared_ptr<CdsObject>& obj, const 
     importService->parseMetafile(obj, path);
 }
 
-std::shared_ptr<CdsObject> ContentManager::_addFile(const fs::directory_entry& dirEnt, fs::path rootPath, AutoScanSetting& asSetting, const std::shared_ptr<CMAddFileTask>& task)
+std::shared_ptr<CdsObject> ContentManager::_addFile(
+    const fs::directory_entry& dirEnt,
+    fs::path rootPath,
+    AutoScanSetting& asSetting,
+    const std::shared_ptr<CMAddFileTask>& task)
 {
     if (!asSetting.hidden && dirEnt.path().is_relative()) {
         return nullptr;
@@ -492,7 +506,12 @@ bool ContentManager::updateAttachedResources(const std::shared_ptr<AutoscanDirec
     return parentRemoved;
 }
 
-std::vector<int> ContentManager::_removeObject(const std::shared_ptr<AutoscanDirectory>& adir, const std::shared_ptr<CdsObject>& obj, const fs::path& path, bool rescanResource, bool all)
+std::vector<int> ContentManager::_removeObject(
+    const std::shared_ptr<AutoscanDirectory>& adir,
+    const std::shared_ptr<CdsObject>& obj,
+    const fs::path& path,
+    bool rescanResource,
+    bool all)
 {
     if (!obj || obj->getID() == INVALID_OBJECT_ID)
         return {};
@@ -954,7 +973,7 @@ void ContentManager::addRecursive(
 }
 
 template <typename T>
-void ContentManager::updateCdsObject(const std::shared_ptr<T>& item, const std::map<std::string, std::string>& parameters)
+std::shared_ptr<CdsObject> ContentManager::updateCdsObject(const std::shared_ptr<T>& item, const std::map<std::string, std::string>& parameters)
 {
     std::string title = getValueOrDefault(parameters, "title");
     std::string upnpClass = getValueOrDefault(parameters, "class");
@@ -965,10 +984,11 @@ void ContentManager::updateCdsObject(const std::shared_ptr<T>& item, const std::
     std::string flags = getValueOrDefault(parameters, "flags");
 
     log_error("updateCdsObject: CdsObject {} not updated", title);
+    return nullptr;
 }
 
 template <>
-void ContentManager::updateCdsObject(const std::shared_ptr<CdsContainer>& item, const std::map<std::string, std::string>& parameters)
+std::shared_ptr<CdsObject> ContentManager::updateCdsObject(const std::shared_ptr<CdsContainer>& item, const std::map<std::string, std::string>& parameters)
 {
     std::string title = getValueOrDefault(parameters, "title");
     std::string upnpClass = getValueOrDefault(parameters, "class");
@@ -999,10 +1019,11 @@ void ContentManager::updateCdsObject(const std::shared_ptr<CdsContainer>& item, 
         update_manager->containerChanged(item->getParentID());
         session_manager->containerChangedUI(item->getParentID());
     }
+    return clone;
 }
 
 template <>
-void ContentManager::updateCdsObject(const std::shared_ptr<CdsItem>& item, const std::map<std::string, std::string>& parameters)
+std::shared_ptr<CdsObject> ContentManager::updateCdsObject(const std::shared_ptr<CdsItem>& item, const std::map<std::string, std::string>& parameters)
 {
     std::string title = getValueOrDefault(parameters, "title");
     std::string upnpClass = getValueOrDefault(parameters, "class");
@@ -1070,20 +1091,21 @@ void ContentManager::updateCdsObject(const std::shared_ptr<CdsItem>& item, const
         log_debug("updateObject: calling containerChanged on item {}", item->getTitle());
         update_manager->containerChanged(item->getParentID());
     }
+    return clone;
 }
 
-void ContentManager::updateObject(int objectID, const std::map<std::string, std::string>& parameters)
+std::shared_ptr<CdsObject> ContentManager::updateObject(int objectID, const std::map<std::string, std::string>& parameters)
 {
     auto obj = database->loadObject(objectID);
     auto item = std::dynamic_pointer_cast<CdsItem>(obj);
     if (item) {
-        updateCdsObject(item, parameters);
+        return updateCdsObject(item, parameters);
     } else {
         auto cont = std::dynamic_pointer_cast<CdsContainer>(obj);
         if (cont) {
-            updateCdsObject(cont, parameters);
+            return updateCdsObject(cont, parameters);
         } else {
-            updateCdsObject(obj, parameters);
+            return updateCdsObject(obj, parameters);
         }
     }
 }
@@ -1293,7 +1315,11 @@ void ContentManager::addTask(std::shared_ptr<GenericTask> task, bool lowPriority
     threadRunner->notify();
 }
 
-std::shared_ptr<CdsObject> ContentManager::addFile(const fs::directory_entry& dirEnt, AutoScanSetting& asSetting, bool lowPriority, bool cancellable)
+std::shared_ptr<CdsObject> ContentManager::addFile(
+    const fs::directory_entry& dirEnt,
+    AutoScanSetting& asSetting,
+    bool lowPriority,
+    bool cancellable)
 {
     fs::path rootpath;
     if (dirEnt.is_directory())
@@ -1301,13 +1327,23 @@ std::shared_ptr<CdsObject> ContentManager::addFile(const fs::directory_entry& di
     return addFileInternal(dirEnt, rootpath, asSetting, lowPriority, 0, cancellable);
 }
 
-std::shared_ptr<CdsObject> ContentManager::addFile(const fs::directory_entry& dirEnt, const fs::path& rootpath, AutoScanSetting& asSetting, bool lowPriority, bool cancellable)
+std::shared_ptr<CdsObject> ContentManager::addFile(
+    const fs::directory_entry& dirEnt,
+    const fs::path& rootpath,
+    AutoScanSetting& asSetting,
+    bool lowPriority,
+    bool cancellable)
 {
     return addFileInternal(dirEnt, rootpath, asSetting, lowPriority, 0, cancellable);
 }
 
 std::shared_ptr<CdsObject> ContentManager::addFileInternal(
-    const fs::directory_entry& dirEnt, const fs::path& rootpath, AutoScanSetting& asSetting, bool lowPriority, unsigned int parentTaskID, bool cancellable)
+    const fs::directory_entry& dirEnt,
+    const fs::path& rootpath,
+    AutoScanSetting& asSetting,
+    bool lowPriority,
+    unsigned int parentTaskID,
+    bool cancellable)
 {
     if (asSetting.async) {
         auto self = shared_from_this();
@@ -1407,7 +1443,13 @@ void ContentManager::invalidateTask(unsigned int taskID, TaskOwner taskOwner)
 #endif
 }
 
-std::vector<int> ContentManager::removeObject(const std::shared_ptr<AutoscanDirectory>& adir, const std::shared_ptr<CdsObject>& obj, const fs::path& path, bool rescanResource, bool async, bool all)
+std::vector<int> ContentManager::removeObject(
+    const std::shared_ptr<AutoscanDirectory>& adir,
+    const std::shared_ptr<CdsObject>& obj,
+    const fs::path& path,
+    bool rescanResource,
+    bool async,
+    bool all)
 {
     if (async) {
         auto self = shared_from_this();
@@ -1459,7 +1501,11 @@ void ContentManager::cleanupTasks(const fs::path& path)
     }
 }
 
-void ContentManager::rescanDirectory(const std::shared_ptr<AutoscanDirectory>& adir, int objectId, fs::path descPath, bool cancellable)
+void ContentManager::rescanDirectory(
+    const std::shared_ptr<AutoscanDirectory>& adir,
+    int objectId,
+    fs::path descPath,
+    bool cancellable)
 {
     auto self = shared_from_this();
     auto task = std::make_shared<CMRescanDirectoryTask>(self, adir, objectId, cancellable);
@@ -1500,7 +1546,7 @@ void ContentManager::removeAutoscanDirectory(const std::shared_ptr<AutoscanDirec
         throw_std_runtime_error("can not remove autoscan directory - was not an autoscan");
 
     adir->setTaskCount(-1);
-    autoscanList->remove(adir->getScanID());
+    autoscanList->remove(adir);
     database->removeAutoscanDirectory(adir);
     session_manager->containerChangedUI(adir->getObjectID());
 
@@ -1585,17 +1631,22 @@ void ContentManager::setAutoscanDirectory(const std::shared_ptr<AutoscanDirector
     copy->setRecursive(dir->getRecursive());
     copy->setInterval(dir->getInterval());
     copy->setScanContent(dir->getScanContent());
+    copy->setDirTypes(dir->hasDirTypes());
 
-    autoscanList->remove(copy->getScanID());
+    if (dir->isValid())
+        autoscanList->remove(dir); // remove old version of dir
 
-    copy->setScanMode(dir->getScanMode());
     scanDir(copy, original->getScanMode() != copy->getScanMode());
+    copy->setScanMode(dir->getScanMode());
     database->updateAutoscanDirectory(copy);
 }
 
 void ContentManager::scanDir(const std::shared_ptr<AutoscanDirectory>& dir, bool updateUI)
 {
-    autoscanList->add(dir);
+    if (dir->isValid())
+        autoscanList->add(dir, dir->getScanID());
+    else
+        autoscanList->add(dir);
 
     if (dir->getScanMode() == AutoscanScanMode::Timed)
         timerNotify(dir->getTimerParameter());

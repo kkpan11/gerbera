@@ -37,25 +37,23 @@
 #include "cds/cds_container.h"
 #include "config/config_val.h"
 #include "config/result/autoscan.h"
+#include "content/content.h"
 #include "database/database.h"
 #include "database/db_param.h"
 #include "exceptions.h"
 #include "upnp/xml_builder.h"
 #include "util/xml_to_json.h"
 
-void Web::Containers::process()
-{
-    log_debug("start process()");
-    checkRequest();
+const std::string Web::Containers::PAGE = "containers";
 
+void Web::Containers::processPageAction(pugi::xml_node& element)
+{
     int parentID = intParam("parent_id", INVALID_OBJECT_ID);
     std::string action = param("action");
     if (parentID == INVALID_OBJECT_ID)
         throw_std_runtime_error("no parent_id given");
 
-    auto root = xmlDoc->document_element();
-
-    auto containers = root.append_child("containers");
+    auto containers = element.append_child("containers");
     xml2Json->setArrayName(containers, "container");
     xml2Json->setFieldType("title", FieldType::STRING);
     containers.append_attribute("parent_id") = parentID;
@@ -70,32 +68,36 @@ void Web::Containers::process()
         auto cont = std::static_pointer_cast<CdsContainer>(obj);
         auto ce = containers.append_child("container");
         ce.append_attribute("id") = cont->getID();
+        ce.append_attribute("ref_id") = cont->getRefID();
         int childCount = cont->getChildCount();
         ce.append_attribute("child_count") = childCount;
-        int autoscanType = cont->getAutoscanType();
-        ce.append_attribute("autoscan_type") = mapAutoscanType(autoscanType).data();
 
         auto url = xmlBuilder->renderContainerImageURL(cont);
         if (url) {
             ce.append_attribute("image") = url.value().c_str();
         }
 
-        std::string autoscanMode = "none";
-        if (autoscanType > 0) {
+        auto autoscanType = cont->getAutoscanType();
+        std::string autoscanMode = (autoscanType != AutoscanType::None) ? AUTOSCAN_TIMED : "none";
+        auto adir = content->getAutoscanDirectory(cont->getLocation());
+        if (adir) {
+            autoscanType = autoscanType == AutoscanType::None ? AutoscanType::Config : autoscanType;
             autoscanMode = AUTOSCAN_TIMED;
-#ifdef HAVE_INOTIFY
-            if (config->getBoolOption(ConfigVal::IMPORT_AUTOSCAN_USE_INOTIFY)) {
-                auto adir = database->getAutoscanDirectory(cont->getID());
-                if (adir && (adir->getScanMode() == AutoscanScanMode::INotify))
-                    autoscanMode = AUTOSCAN_INOTIFY;
-            }
-#endif
         }
+#ifdef HAVE_INOTIFY
+        if (config->getBoolOption(ConfigVal::IMPORT_AUTOSCAN_USE_INOTIFY)) {
+            if (adir && (adir->getScanMode() == AutoscanScanMode::INotify)) {
+                autoscanMode = AUTOSCAN_INOTIFY;
+                autoscanType = autoscanType == AutoscanType::None ? AutoscanType::Config : autoscanType;
+            }
+        }
+#endif
+        ce.append_attribute("autoscan_type") = mapAutoscanType(autoscanType).data();
         ce.append_attribute("autoscan_mode") = autoscanMode.c_str();
+        ce.append_attribute("persistent") = cont->getFlags() & OBJECT_FLAG_PERSISTENT_CONTAINER ? "true" : "false";
         ce.append_attribute("title") = cont->getTitle().c_str();
         ce.append_attribute("location") = cont->getLocation().c_str();
         ce.append_attribute("upnp_shortcut") = cont->getUpnpShortcut().c_str();
         ce.append_attribute("upnp_class") = cont->getClass().c_str();
     }
-    log_debug("end process()");
 }

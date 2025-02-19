@@ -36,6 +36,7 @@
 
 #include "config/config_val.h"
 #include "config/result/autoscan.h"
+#include "config/result/directory_tweak.h"
 #include "content/content.h"
 #include "util/string_converter.h"
 #include "util/tools.h"
@@ -46,28 +47,26 @@
 
 using dirInfo = std::pair<fs::path, bool>;
 
+const std::string Web::Directories::PAGE = "directories";
+
 Web::Directories::Directories(const std::shared_ptr<Content>& content,
     std::shared_ptr<ConverterManager> converterManager,
     const std::shared_ptr<Server>& server,
     const std::shared_ptr<UpnpXMLBuilder>& xmlBuilder,
     const std::shared_ptr<Quirks>& quirks)
-    : WebRequestHandler(content, server, xmlBuilder, quirks)
+    : PageRequest(content, server, xmlBuilder, quirks)
     , converterManager(std::move(converterManager))
 {
 }
 
-void Web::Directories::process()
+void Web::Directories::processPageAction(pugi::xml_node& element)
 {
     static auto RootId = fmt::format("{}", CDS_ID_ROOT);
-
-    checkRequest();
 
     std::string parentID = param("parent_id");
     auto path = fs::path(parentID.empty() || parentID == RootId ? FS_ROOT_DIRECTORY : hexDecodeString(parentID));
 
-    auto root = xmlDoc->document_element();
-
-    auto containers = root.append_child("containers");
+    auto containers = element.append_child("containers");
     xml2Json->setArrayName(containers, "container");
     xml2Json->setFieldType("title", FieldType::STRING);
     containers.append_attribute("parent_id") = parentID.c_str();
@@ -86,7 +85,6 @@ void Web::Directories::process()
 
     std::error_code ec;
     std::map<std::string, dirInfo> filesMap;
-    auto autoscanDirs = content->getAutoscanDirectories();
 
     for (auto&& it : fs::directory_iterator(path, ec)) {
         const fs::path& filepath = it.path();
@@ -95,14 +93,20 @@ void Web::Directories::process()
             continue;
         if (!includesFullpath.empty()
             && std::none_of(includesFullpath.begin(), includesFullpath.end(), //
-                [&](auto&& sub) { return startswith(filepath.string(), sub) || startswith(sub, filepath.string()); }))
+                [&](fs::path&& sub) { return isSubDir(filepath.string(), sub) || isSubDir(sub, filepath.string()) || sub == filepath; })) {
+            log_debug("skipping unwanted dir {}", filepath.string());
             continue; // skip unwanted dir
+        }
         if (includesFullpath.empty()) {
-            if (std::find(excludesFullpath.begin(), excludesFullpath.end(), filepath) != excludesFullpath.end())
+            if (std::find(excludesFullpath.begin(), excludesFullpath.end(), filepath) != excludesFullpath.end()) {
+                log_debug("skipping excluded dir {}", filepath.string());
                 continue; // skip excluded dir
+            }
             if (std::find(excludesDirname.begin(), excludesDirname.end(), filepath.filename()) != excludesDirname.end()
-                || (excludeConfigDirs && startswith(filepath.filename().string(), ".")))
+                || (excludeConfigDirs && startswith(filepath.filename().string(), "."))) {
+                log_debug("skipping special dir {}", filepath.string());
                 continue; // skip dir with leading .
+            }
         }
         auto dir = fs::directory_iterator(filepath, ec);
         bool hasContent = std::any_of(begin(dir), end(dir), [&](auto&& sub) { return sub.is_directory(ec) || isRegularFile(sub, ec); });
@@ -112,6 +116,9 @@ void Web::Directories::process()
         filesMap.emplace(id, std::pair(filepath, hasContent));
     }
 
+    auto autoscanDirs = content->getAutoscanDirectories();
+    auto allTweaks = config->getDirectoryTweakOption(ConfigVal::IMPORT_DIRECTORIES_LIST)->getArrayCopy();
+
     auto f2i = converterManager->f2i();
     for (auto&& [key, val] : filesMap) {
         auto file = val.first;
@@ -119,19 +126,33 @@ void Web::Directories::process()
         auto ce = containers.append_child("container");
         ce.append_attribute("id") = key.c_str();
         ce.append_attribute("child_count") = has;
+        auto tweak = std::find_if(allTweaks.begin(), allTweaks.end(), [&](auto& d) { return file == d->getLocation(); });
         auto aDir = std::find_if(autoscanDirs.begin(), autoscanDirs.end(), [&](auto& a) { return file == a->getLocation(); });
+        ce.append_attribute("tweak") = tweak != allTweaks.end() ? "true" : "false";
         if (aDir != autoscanDirs.end()) {
             ce.append_attribute("autoscan_type") = (*aDir)->persistent() ? "persistent" : "ui";
             ce.append_attribute("autoscan_mode") = AutoscanDirectory::mapScanmode((*aDir)->getScanMode());
         } else {
-            aDir = std::find_if(autoscanDirs.begin(), autoscanDirs.end(), [&](auto& a) { return a->getRecursive() && startswith(file.string(), a->getLocation().string()); });
+            aDir = std::find_if(autoscanDirs.begin(), autoscanDirs.end(), [&](auto& a) { return a->getRecursive() && isSubDir(file, a->getLocation()); });
             if (aDir != autoscanDirs.end()) {
                 ce.append_attribute("autoscan_type") = "parent";
                 ce.append_attribute("autoscan_mode") = AutoscanDirectory::mapScanmode((*aDir)->getScanMode());
             }
         }
-        ce.append_attribute("title") = f2i->convert(file.filename()).c_str();
-        ce.append_attribute("location") = f2i->convert(file).c_str();
+        {
+            auto [mval, err] = f2i->convert(file.filename());
+            if (!err.empty()) {
+                log_warning("{}: {}", file.filename().string(), err);
+            }
+            ce.append_attribute("title") = mval.c_str();
+        }
+        {
+            auto [mval, err] = f2i->convert(file);
+            if (!err.empty()) {
+                log_warning("{}: {}", file.string(), err);
+            }
+            ce.append_attribute("location") = mval.c_str();
+        }
         ce.append_attribute("upnp_class") = "folder";
     }
 }

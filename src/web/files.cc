@@ -35,32 +35,32 @@
 #include "pages.h" // API
 
 #include "common.h"
+#include "config/config.h"
 #include "config/config_val.h"
 #include "exceptions.h"
+#include "util/logger.h"
 #include "util/string_converter.h"
 #include "util/tools.h"
 #include "util/xml_to_json.h"
+
+const std::string Web::Files::PAGE = "files";
 
 Web::Files::Files(const std::shared_ptr<Content>& content,
     std::shared_ptr<ConverterManager> converterManager,
     const std::shared_ptr<Server>& server,
     const std::shared_ptr<UpnpXMLBuilder>& xmlBuilder,
     const std::shared_ptr<Quirks>& quirks)
-    : WebRequestHandler(content, server, xmlBuilder, quirks)
+    : PageRequest(content, server, xmlBuilder, quirks)
     , converterManager(std::move(converterManager))
 {
 }
 
-void Web::Files::process()
+void Web::Files::processPageAction(pugi::xml_node& element)
 {
-    checkRequest();
-
     std::string parentID = param("parent_id");
     std::string path = (parentID == "0") ? FS_ROOT_DIRECTORY : hexDecodeString(parentID);
 
-    auto root = xmlDoc->document_element();
-
-    auto files = root.append_child("files");
+    auto files = element.append_child("files");
     xml2Json->setArrayName(files, "file");
     xml2Json->setFieldType("filename", FieldType::STRING);
     files.append_attribute("parent_id") = parentID.c_str();
@@ -92,6 +92,10 @@ void Web::Files::process()
     for (auto&& [key, val] : filesMap) {
         auto fe = files.append_child("file");
         fe.append_attribute("id") = key.c_str();
-        fe.append_attribute("filename") = f2i->convert(val).c_str();
+        auto [mval, err] = f2i->convert(val);
+        if (!err.empty()) {
+            log_warning("{}: {}", val.string(), err);
+        }
+        fe.append_attribute("filename") = mval.c_str();
     }
 }

@@ -285,7 +285,8 @@ transcoding are not available. The autoscan entry corresponding to the active ob
         print2("Info", config['/server/name']);
         print2("Error", "Empty setting", config['/import/library-options/id3/auxdata/add-data'][0]);
         print2("Warning", "Active mapping for", config['/import/layout/path']['Directories']);
-        print2("Debug", "Checking", config['/import/autoscan/directory'][object_autoscan_id].location);
+        print2("Debug", "Checking", config['/import/autoscan/inotify/directory'][object_autoscan_id].location);
+        print2("Debug", "Checking", config['/import/autoscan/timed/directory'][object_autoscan_id].interval);
 
 
 Constants
@@ -658,6 +659,18 @@ They can be used by the import and by the playlist script.
             }
             return genre;
         }
+
+.. js:function:: getAudioDetails(obj)
+
+    Assign required metadata entries to result properties
+
+    :param object obj: Source object
+    :returns: audio object with respective properties
+
+    .. literalinclude:: ../scripts/js/common.js
+        :start-after: // doc-map-audio-details-begin
+        :end-before: // doc-map-audio-details-end
+        :language: js
 
 .. js:function:: mapInitial(firstChar)
 

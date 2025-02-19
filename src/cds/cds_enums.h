@@ -60,15 +60,17 @@ static constexpr bool IS_CDS_ITEM_EXTERNAL_URL(unsigned int type)
 #define OBJECT_FLAG_ONLINE_SERVICE 0x00000040u
 #define OBJECT_FLAG_OGG_THEORA 0x00000080u
 
-#define OBJECT_AUTOSCAN_NONE 0u
-#define OBJECT_AUTOSCAN_UI 1u
-#define OBJECT_AUTOSCAN_CFG 2u
+enum class AutoscanType : int {
+    None = 0,
+    Ui = 1,
+    Config = 2,
+};
 
 enum class ResourcePurpose : int {
     Content = 0,
     Thumbnail,
     Subtitle,
-    Transcode
+    Transcode,
 };
 
 enum class ObjectType : int {
@@ -102,6 +104,7 @@ enum class ResourceAttribute : int {
     VIDEOCODEC,
     FORMAT,
     ORIENTATION,
+    PIXELFORMAT,
     MAX
 };
 
@@ -151,6 +154,7 @@ private:
         { ResourceAttribute::FORMAT, "format" },
         { ResourceAttribute::TYPE, "type" },
         { ResourceAttribute::ORIENTATION, "orientation" },
+        { ResourceAttribute::PIXELFORMAT, "pixelFormat" },
         { ResourceAttribute::MAX, "unknown" },
     };
     inline static const std::map<ResourceAttribute, std::string> attrToDisplay {
@@ -172,6 +176,7 @@ private:
         { ResourceAttribute::FORMAT, "format" },
         { ResourceAttribute::TYPE, "type" },
         { ResourceAttribute::ORIENTATION, "orientation" },
+        { ResourceAttribute::PIXELFORMAT, "pixelFormat" },
         { ResourceAttribute::MAX, "unknown" },
     };
 
@@ -181,6 +186,7 @@ public:
     static ContentHandler remapContentHandler(const std::string& contHandler);
     static ContentHandler remapContentHandler(int ch);
 
+    static ResourcePurpose mapPurpose(const std::string& name);
     static ResourcePurpose remapPurpose(int ip) { return static_cast<ResourcePurpose>(ip); }
     static std::string getPurposeDisplay(ResourcePurpose purpose);
 

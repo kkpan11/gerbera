@@ -48,15 +48,16 @@ static constexpr auto sqlite3AddResourceAttr = std::string_view(R"(ALTER TABLE "
 Sqlite3Database::Sqlite3Database(const std::shared_ptr<Config>& config, const std::shared_ptr<Mime>& mime, const std::shared_ptr<ConverterManager>& converterManager, std::shared_ptr<Timer> timer)
     : SQLDatabase(config, mime, converterManager)
     , timer(std::move(timer))
+    , shutdownAttempts(this->config->getIntOption(ConfigVal::SERVER_STORAGE_SQLITE_SHUTDOWN_ATTEMPTS))
 {
     table_quote_begin = '"';
     table_quote_end = '"';
 
     // if sqlite3.sql or sqlite3-upgrade.xml is changed hashies have to be updated
-    hashies = { 220562690, // index 0 is used for create script sqlite3.sql = Version 1
+    hashies = { 2195679403, // index 0 is used for create script sqlite3.sql = Version 1
         778996897, 3362507034, 853149842, 4035419264, 3497064885, 974692115, 119767663, 3167732653, 2427825904, 3305506356, // upgrade 2-11
         43189396, 2767540493, 2512852146, 1273710965, 319062951, 3593597366, 1028160353, 881071639, 1989518047, 3743992560, // upgrade 12-21
-        3135921396 };
+        3135921396, 3108208 };
 }
 
 void Sqlite3Database::prepare()
@@ -247,6 +248,23 @@ void Sqlite3DatabaseWithTransactions::commit(std::string_view tName)
     }
 }
 
+void Sqlite3Database::handleException(const std::runtime_error& exc, const std::string& lineMessage)
+{
+    if (!dbInitDone)
+        throw_std_runtime_error(exc.what());
+    ++shutdownFlag;
+    if (shutdownFlag <= 1) {
+        log_error("Prematurely shutting down.\n{}\n{}", lineMessage, exc.what());
+        rollback("");
+        shutdown();
+    }
+    if (shutdownFlag >= shutdownAttempts) {
+        log_error("Exceeding shutdown limit {}.\n{}\n{}", shutdownAttempts, lineMessage, exc.what());
+        std::exit(1);
+    }
+    log_error("Already shutting down.\n{}\n{}", lineMessage, exc.what());
+}
+
 std::shared_ptr<SQLResult> Sqlite3Database::select(const std::string& query)
 {
     try {
@@ -256,14 +274,7 @@ std::shared_ptr<SQLResult> Sqlite3Database::select(const std::string& query)
         stask->waitForTask();
         return stask->getResult();
     } catch (const std::runtime_error& e) {
-        if (!dbInitDone)
-            throw_std_runtime_error(e.what());
-        if (!shutdownFlag) {
-            log_error("Prematurely shutting down.\n{}", e.what());
-            rollback("");
-            shutdown();
-        }
-        log_error("Already shutting down.\n{}", e.what());
+        handleException(e, LINE_MESSAGE);
         return {};
     }
 }
@@ -287,14 +298,7 @@ void Sqlite3Database::del(std::string_view tableName, const std::string& clause,
         addTask(etask);
         etask->waitForTask();
     } catch (const std::runtime_error& e) {
-        if (!dbInitDone)
-            throw_std_runtime_error(e.what());
-        if (!shutdownFlag) {
-            log_error("Prematurely shutting down.\n{}", e.what());
-            rollback("");
-            shutdown();
-        }
-        log_error("Already shutting down.\n{}", e.what());
+        handleException(e, LINE_MESSAGE);
     }
 }
 
@@ -307,14 +311,7 @@ void Sqlite3Database::exec(std::string_view tableName, const std::string& query,
         addTask(etask);
         etask->waitForTask();
     } catch (const std::runtime_error& e) {
-        if (!dbInitDone)
-            throw_std_runtime_error(e.what());
-        if (!shutdownFlag) {
-            log_error("Prematurely shutting down.\n{}", e.what());
-            rollback("");
-            shutdown();
-        }
-        log_error("Already shutting down.\n{}", e.what());
+        handleException(e, LINE_MESSAGE);
     }
 }
 
@@ -327,14 +324,7 @@ int Sqlite3Database::exec(const std::string& query, bool getLastInsertId)
         etask->waitForTask();
         return getLastInsertId ? etask->getLastInsertId() : -1;
     } catch (const std::runtime_error& e) {
-        if (!dbInitDone)
-            throw_std_runtime_error(e.what());
-        if (!shutdownFlag) {
-            log_error("Prematurely shutting down.\n{}", e.what());
-            rollback("");
-            shutdown();
-        }
-        log_error("Already shutting down.\n{}", e.what());
+        handleException(e, LINE_MESSAGE);
         return -1;
     }
 }

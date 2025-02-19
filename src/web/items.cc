@@ -45,12 +45,11 @@
 #include "upnp/xml_builder.h"
 #include "util/xml_to_json.h"
 
-/// \brief orocess request for item list in ui
-void Web::Items::process()
-{
-    log_debug("start process()");
-    checkRequest();
+const std::string Web::Items::PAGE = "items";
 
+/// \brief orocess request for item list in ui
+void Web::Items::processPageAction(pugi::xml_node& element)
+{
     int parentID = intParam("parent_id");
     int start = intParam("start");
     int count = intParam("count");
@@ -61,8 +60,7 @@ void Web::Items::process()
         throw_std_runtime_error("illegal count parameter");
 
     // set result options
-    auto root = xmlDoc->document_element();
-    auto items = root.append_child("items");
+    auto items = element.append_child("items");
     xml2Json->setArrayName(items, "item");
     xml2Json->setFieldType("title", FieldType::STRING);
     xml2Json->setFieldType("part", FieldType::STRING);
@@ -118,7 +116,6 @@ void Web::Items::process()
         }
         cnt++;
     }
-    log_debug("end process()");
 }
 
 std::vector<std::shared_ptr<CdsObject>> Web::Items::doBrowse(
@@ -150,9 +147,9 @@ std::vector<std::shared_ptr<CdsObject>> Web::Items::doBrowse(
 
     int containerId = container->getID();
     auto parentDir = database->getAutoscanDirectory(containerId);
-    int autoscanType = 0;
+    auto autoscanType = AutoscanType::None;
     if (parentDir) {
-        autoscanType = parentDir->persistent() ? 2 : 1;
+        autoscanType = parentDir->persistent() ? AutoscanType::Config : AutoscanType::Ui;
         autoscanMode = AUTOSCAN_TIMED;
     }
 
@@ -160,7 +157,7 @@ std::vector<std::shared_ptr<CdsObject>> Web::Items::doBrowse(
     if (config->getBoolOption(ConfigVal::IMPORT_AUTOSCAN_USE_INOTIFY)) {
         // check for inotify mode
         int startpointId = INVALID_OBJECT_ID;
-        if (autoscanType == 0) {
+        if (autoscanType == AutoscanType::None) {
             auto pathIDs = database->getPathIDs(containerId);
             for (int pathId : pathIDs) {
                 auto pathDir = database->getAutoscanDirectory(pathId);
@@ -177,7 +174,7 @@ std::vector<std::shared_ptr<CdsObject>> Web::Items::doBrowse(
             auto startPtDir = database->getAutoscanDirectory(startpointId);
             if (startPtDir && startPtDir->getScanMode() == AutoscanScanMode::INotify) {
                 protectItems = true;
-                if (autoscanType == 0 || startPtDir->persistent())
+                if (autoscanType == AutoscanType::None || startPtDir->persistent())
                     protectContainer = true;
 
                 autoscanMode = AUTOSCAN_INOTIFY;

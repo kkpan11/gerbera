@@ -103,11 +103,17 @@ public:
     /// \param interval rescan interval in seconds (only for timed scan mode)
     /// \param hidden include hidden files
     /// \param followSymlinks follow symbolic links
-    /// \param mediaType type of media to load from directory
+    /// \param mediaType type of media to load from directory zero means none.
     /// \param containerMap mapping of media types to container types
-    /// zero means none.
-    AutoscanDirectory(fs::path location, AutoscanScanMode mode, bool recursive, bool persistent,
-        unsigned int interval = 0, bool hidden = false, bool followSymlinks = false, int mediaType = -1,
+    AutoscanDirectory(
+        fs::path location,
+        AutoscanScanMode mode,
+        bool recursive,
+        bool persistent,
+        unsigned int interval = 0,
+        bool hidden = false,
+        bool followSymlinks = false,
+        int mediaType = -1,
         const std::map<AutoscanMediaMode, std::string>& containerMap = ContainerTypesDefaults);
     virtual ~AutoscanDirectory() = default;
 
@@ -174,6 +180,10 @@ public:
     void setPersistent(bool persistentFlag) { this->persistentFlag = persistentFlag; }
     bool persistent() const { return persistentFlag; }
 
+    /// @brief Enable rescanning unknown files
+    void setForceRescan(bool forceRescan) { this->forceRescan = forceRescan; }
+    bool getForceRescan() const { return forceRescan; }
+
     /// \brief Sets the last modification time of the current ongoing scan.
     ///
     /// When doing a FullScan we look at modification times of the files.
@@ -213,18 +223,16 @@ public:
     void setImportService(std::shared_ptr<ImportService> is) { importService = std::move(is); }
     std::shared_ptr<ImportService> getImportService() const { return importService; }
 
-    /* helpers for autoscan stuff */
+    /* helpers for autoscan enum stuff */
     static const char* mapScanmode(AutoscanScanMode scanmode);
     static AutoscanScanMode remapScanmode(const std::string& scanmode);
 
-    void validate(bool newEntry, std::size_t index) override
+    /* overrides for Editable */
+    void setValid(bool newEntry, std::size_t index) override
     {
-        if (!newEntry) {
-            setPersistent(true);
-        }
         setScanID(index);
     }
-    void invalidate() override
+    void setInvalid() override
     {
         scanID = INVALID_SCAN_ID;
     }
@@ -238,6 +246,7 @@ protected:
     AutoscanScanMode mode {};
     bool recursive {};
     bool hidden {};
+    bool forceRescan {};
     bool dirTypes { true };
     bool followSymlinks {};
     bool persistentFlag {};

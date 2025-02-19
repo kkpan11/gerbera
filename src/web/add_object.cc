@@ -2,7 +2,7 @@
 
     MediaTomb - http://www.mediatomb.cc/
 
-    add_object.cc - this file is part of MediaTomb.
+    web/add_object.cc - this file is part of MediaTomb.
 
     Copyright (C) 2005 Gena Batyan <bgeradz@mediatomb.cc>,
                        Sergey 'Jin' Bostandzhyan <jin@mediatomb.cc>
@@ -29,7 +29,7 @@
     $Id$
 */
 
-/// \file add_object.cc
+/// \file web/add_object.cc
 #define GRB_LOG_FAC GrbLogFacility::web
 
 #include "pages.h" // API
@@ -43,7 +43,12 @@
 #include "util/tools.h"
 #include "util/xml_to_json.h"
 
-void Web::AddObject::addContainer(int parentID, const std::string& title, const std::string& upnp_class)
+const std::string Web::AddObject::PAGE = "add_object";
+
+void Web::AddObject::addContainer(
+    int parentID,
+    const std::string& title,
+    const std::string& upnp_class)
 {
     auto cont = content->addContainer(parentID, title, upnp_class);
 
@@ -54,7 +59,11 @@ void Web::AddObject::addContainer(int parentID, const std::string& title, const 
     }
 }
 
-std::shared_ptr<CdsItem> Web::AddObject::addItem(int parentID, const std::string& title, const std::string& upnp_class, const fs::path& location)
+std::shared_ptr<CdsItem> Web::AddObject::addItem(
+    int parentID,
+    const std::string& title,
+    const std::string& upnp_class,
+    const fs::path& location)
 {
     auto item = std::make_shared<CdsItem>();
     item->setParentID(parentID);
@@ -86,7 +95,12 @@ std::shared_ptr<CdsItem> Web::AddObject::addItem(int parentID, const std::string
     return item;
 }
 
-std::shared_ptr<CdsItemExternalURL> Web::AddObject::addUrl(int parentID, const std::string& title, const std::string& upnp_class, bool addProtocol, const fs::path& location)
+std::shared_ptr<CdsItemExternalURL> Web::AddObject::addUrl(
+    int parentID,
+    const std::string& title,
+    const std::string& upnp_class,
+    bool addProtocol,
+    const fs::path& location)
 {
     auto item = std::make_shared<CdsItemExternalURL>();
     std::string protocolInfo;
@@ -102,27 +116,31 @@ std::shared_ptr<CdsItemExternalURL> Web::AddObject::addUrl(int parentID, const s
         item->addMetaData(MetadataFields::M_DESCRIPTION, desc);
     }
 
-    std::string mime = param("mime-type");
-    if (mime.empty())
-        mime = MIMETYPE_DEFAULT;
-    item->setMimeType(mime);
-
     std::string flags = param("flags");
     if (!flags.empty())
         item->setFlags(CdsObject::makeFlag(flags));
 
-    if (addProtocol) {
-        std::string protocol = param("protocol");
-        if (!protocol.empty())
-            protocolInfo = renderProtocolInfo(mime, protocol);
-        else
-            protocolInfo = renderProtocolInfo(mime);
-    } else
-        protocolInfo = renderProtocolInfo(mime);
+    {
+        std::string mime = param("mime-type");
+        if (mime.empty())
+            mime = MIMETYPE_DEFAULT;
+        item->setMimeType(mime);
 
-    auto resource = std::make_shared<CdsResource>(ContentHandler::DEFAULT, ResourcePurpose::Content);
-    resource->addAttribute(ResourceAttribute::PROTOCOLINFO, protocolInfo);
-    item->addResource(resource);
+        if (addProtocol) {
+            std::string protocol = param("protocol");
+            if (!protocol.empty())
+                protocolInfo = renderProtocolInfo(mime, protocol);
+            else
+                protocolInfo = renderProtocolInfo(mime);
+        } else
+            protocolInfo = renderProtocolInfo(mime);
+
+        auto resource = std::make_shared<CdsResource>(ContentHandler::DEFAULT, ResourcePurpose::Content);
+        resource->addAttribute(ResourceAttribute::PROTOCOLINFO, protocolInfo);
+        item->addResource(resource);
+    }
+
+    readResources(item);
 
     return item;
 }
@@ -137,10 +155,8 @@ bool Web::AddObject::isHiddenFile(const std::shared_ptr<CdsObject>& cdsObj)
     return content->isHiddenFile(fs::directory_entry(cdsObj->getLocation()), false, asSetting);
 }
 
-void Web::AddObject::process()
+void Web::AddObject::processPageAction(pugi::xml_node& element)
 {
-    checkRequest();
-
     auto title = std::string(param("title"));
     if (title.empty())
         throw_std_runtime_error("Empty 'title'");

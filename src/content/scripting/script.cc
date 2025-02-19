@@ -219,26 +219,33 @@ Script::Script(const std::shared_ptr<Content>& content, const std::string& paren
 
     for (auto&& ascs : definition->getConfigSetupList<ConfigAutoscanSetup>()) {
         duk_push_object(ctx); // autoscan
-        auto autoscan = ascs->getValue()->getAutoscanListOption();
 
-        for (const auto& adir : content->getAutoscanDirectories()) {
-            duk_push_object(ctx);
-
-            setProperty(definition->removeAttribute(ConfigVal::A_AUTOSCAN_DIRECTORY_LOCATION), adir->getLocation());
-            setProperty(definition->removeAttribute(ConfigVal::A_AUTOSCAN_DIRECTORY_MODE), AutoscanDirectory::mapScanmode(adir->getScanMode()));
-            setIntProperty(definition->removeAttribute(ConfigVal::A_AUTOSCAN_DIRECTORY_INTERVAL), adir->getInterval().count());
-            setBoolProperty(definition->removeAttribute(ConfigVal::A_AUTOSCAN_DIRECTORY_RECURSIVE), adir->getRecursive());
-            setIntProperty(definition->removeAttribute(ConfigVal::A_AUTOSCAN_DIRECTORY_MEDIATYPE), adir->getMediaType());
-            setBoolProperty(definition->removeAttribute(ConfigVal::A_AUTOSCAN_DIRECTORY_HIDDENFILES), adir->getHidden());
-            setIntProperty(definition->removeAttribute(ConfigVal::A_AUTOSCAN_DIRECTORY_SCANCOUNT), adir->getActiveScanCount());
-            setIntProperty(definition->removeAttribute(ConfigVal::A_AUTOSCAN_DIRECTORY_TASKCOUNT), adir->getTaskCount());
-            setProperty(definition->removeAttribute(ConfigVal::A_AUTOSCAN_DIRECTORY_LMT), fmt::format("{:%Y-%m-%d %H:%M:%S}", fmt::localtime(adir->getPreviousLMT().count())));
-
-            duk_put_prop_string(ctx, -2, fmt::to_string(adir->getScanID()).c_str());
-        }
+        std::size_t idx = 0;
         std::string autoscanItemPath = ascs->getItemPathRoot(true); // prefix
+        for (const auto& adir : content->getAutoscanDirectories()) {
+            if (adir->getScanMode() == ascs->getScanMode()) {
+                duk_push_object(ctx);
+
+                setProperty(definition->removeAttribute(ConfigVal::A_AUTOSCAN_DIRECTORY_LOCATION), adir->getLocation());
+                setProperty(definition->removeAttribute(ConfigVal::A_AUTOSCAN_DIRECTORY_MODE), AutoscanDirectory::mapScanmode(adir->getScanMode()));
+                setIntProperty(definition->removeAttribute(ConfigVal::A_AUTOSCAN_DIRECTORY_INTERVAL), adir->getInterval().count());
+                setBoolProperty(definition->removeAttribute(ConfigVal::A_AUTOSCAN_DIRECTORY_RECURSIVE), adir->getRecursive());
+                setIntProperty(definition->removeAttribute(ConfigVal::A_AUTOSCAN_DIRECTORY_MEDIATYPE), adir->getMediaType());
+                setBoolProperty(definition->removeAttribute(ConfigVal::A_AUTOSCAN_DIRECTORY_HIDDENFILES), adir->getHidden());
+                setBoolProperty(definition->removeAttribute(ConfigVal::A_AUTOSCAN_DIRECTORY_DIRTYPES), adir->hasDirTypes());
+                setBoolProperty(definition->removeAttribute(ConfigVal::A_AUTOSCAN_DIRECTORY_FORCE_REREAD_UNKNOWN), adir->getForceRescan());
+                setIntProperty(definition->removeAttribute(ConfigVal::A_AUTOSCAN_DIRECTORY_SCANCOUNT), adir->getActiveScanCount());
+                setIntProperty(definition->removeAttribute(ConfigVal::A_AUTOSCAN_DIRECTORY_TASKCOUNT), adir->getTaskCount());
+                setIntProperty(definition->removeAttribute(ConfigVal::A_AUTOSCAN_DIRECTORY_RETRYCOUNT), adir->getRetryCount());
+                setProperty(definition->removeAttribute(ConfigVal::A_AUTOSCAN_DIRECTORY_LMT), fmt::format("{:%Y-%m-%d %H:%M:%S}", fmt::localtime(adir->getPreviousLMT().count())));
+
+                duk_put_prop_string(ctx, -2, fmt::to_string(adir->getScanID()).c_str());
+                log_debug("Adding config[{}][{}] {}", autoscanItemPath, adir->getScanID(), adir->getLocation().string());
+                idx++;
+            }
+        }
         duk_put_prop_string(ctx, -2, autoscanItemPath.c_str()); // autoscan
-        log_debug("Adding config[{}] {}", autoscanItemPath, content->getAutoscanDirectories().size());
+        log_debug("Adding config[{}] {}", autoscanItemPath, idx);
     }
 
     for (auto&& bcs : definition->getConfigSetupList<ConfigBoxLayoutSetup>()) {
@@ -333,7 +340,11 @@ void Script::_load(const fs::path& scriptPath)
 
     auto j2i = converterManager->j2i();
     try {
-        scriptText = j2i->convert(scriptText, true);
+        auto [mval, err] = j2i->convert(scriptText, true);
+        if (!err.empty()) {
+            log_warning("{}: {}", scriptPath.string(), err);
+        }
+        scriptText = mval;
     } catch (const std::runtime_error& e) {
         throw_std_runtime_error("Failed to convert import script: {}", e.what());
     }
@@ -470,6 +481,7 @@ std::vector<int> Script::call(const std::shared_ptr<CdsObject>& obj,
 {
     // write global object used in callback functionss
     cdsObject2dukObject(obj);
+    log_debug("wrote global object {} as {}", obj != nullptr, objectName);
     duk_put_global_string(ctx, objectName.c_str());
 
     // functionName(object, rootPath, autoScanId, containerType)
@@ -546,7 +558,11 @@ void Script::setMetaData(const std::shared_ptr<CdsObject>& obj, const std::share
         } else
             item->setPartNumber(0);
     } else {
-        obj->addMetaData(sym, sc->convert(val));
+        auto [mval, err] = sc->convert(val);
+        if (!err.empty()) {
+            log_warning("{}: {}", obj->getLocation().string(), err);
+        }
+        obj->addMetaData(sym, mval);
     }
 }
 
@@ -620,8 +636,12 @@ std::shared_ptr<CdsObject> Script::createObject(const std::shared_ptr<CdsObject>
                 for (auto&& [key, upnp] : res_names) {
                     auto val = ScriptNamedProperty(ctx, resCount == 0 ? EnumMapper::getAttributeName(key) : fmt::format("{}-{}", resCount, EnumMapper::getAttributeName(key))).getStringValue();
                     if (!val.empty()) {
-                        val = sc->convert(val);
-                        res->addAttribute(key, val);
+                        auto [mval, err] = sc->convert(val);
+                        if (!err.empty()) {
+                            log_warning("{}: {}", obj->getLocation().string(), err);
+                        }
+                        res->addAttribute(key, mval);
+                        log_debug("add res attributes {}={}", key, mval);
                     }
                 }
                 auto head = fmt::format("{}#", resCount);
@@ -649,8 +669,11 @@ std::shared_ptr<CdsObject> Script::createObject(const std::shared_ptr<CdsObject>
             for (auto&& sym : keys) {
                 auto val = ScriptNamedProperty(ctx, sym).getStringValue();
                 if (!val.empty()) {
-                    val = sc->convert(val);
-                    obj->setAuxData(sym, val);
+                    auto [mval, err] = sc->convert(val);
+                    if (!err.empty()) {
+                        log_warning("{}: {}", obj->getLocation().string(), err);
+                    }
+                    obj->setAuxData(sym, mval);
                 }
             }
         });
@@ -674,8 +697,11 @@ std::shared_ptr<CdsObject> Script::dukObject2cdsObject(const std::shared_ptr<Cds
     {
         auto val = ScriptNamedProperty(ctx, "title").getStringValue();
         if (!val.empty()) {
-            val = sc->convert(val);
-            obj->setTitle(val);
+            auto [mval, err] = sc->convert(val);
+            if (!err.empty()) {
+                log_warning("{}: {}", obj->getLocation().string(), err);
+            }
+            obj->setTitle(mval);
         } else if (pcd) {
             obj->setTitle(pcd->getTitle());
         }
@@ -685,8 +711,11 @@ std::shared_ptr<CdsObject> Script::dukObject2cdsObject(const std::shared_ptr<Cds
     {
         auto val = ScriptNamedProperty(ctx, "upnpclass").getStringValue();
         if (!val.empty()) {
-            val = sc->convert(val);
-            obj->setClass(val);
+            auto [mval, err] = sc->convert(val);
+            if (!err.empty()) {
+                log_warning("{}: {}", obj->getLocation().string(), err);
+            }
+            obj->setClass(mval);
         } else if (pcd) {
             obj->setClass(pcd->getClass());
         }
@@ -720,9 +749,12 @@ std::shared_ptr<CdsObject> Script::dukObject2cdsObject(const std::shared_ptr<Cds
     // update description
     auto description = ScriptNamedProperty(ctx, "description").getStringValue();
     if (!description.empty()) {
-        description = sc->convert(description);
+        auto [mval, err] = sc->convert(description);
+        if (!err.empty()) {
+            log_warning("{}: {}", obj->getLocation().string(), err);
+        }
         obj->removeMetaData(MetadataFields::M_DESCRIPTION);
-        obj->addMetaData(MetadataFields::M_DESCRIPTION, description);
+        obj->addMetaData(MetadataFields::M_DESCRIPTION, mval);
     }
 
     // CdsItem
@@ -736,8 +768,11 @@ std::shared_ptr<CdsObject> Script::dukObject2cdsObject(const std::shared_ptr<Cds
         // update mimetype
         auto mimetype = ScriptNamedProperty(ctx, "mimetype").getStringValue();
         if (!mimetype.empty()) {
-            mimetype = sc->convert(mimetype);
-            item->setMimeType(mimetype);
+            auto [mval, err] = sc->convert(mimetype);
+            if (!err.empty()) {
+                log_warning("{}: {}", obj->getLocation().string(), err);
+            }
+            item->setMimeType(mval);
         } else if (pcdItem) {
             item->setMimeType(pcdItem->getMimeType());
         }
@@ -745,17 +780,23 @@ std::shared_ptr<CdsObject> Script::dukObject2cdsObject(const std::shared_ptr<Cds
         // update serviceID for onlineservice
         auto serviceID = ScriptNamedProperty(ctx, "serviceID").getStringValue();
         if (!serviceID.empty()) {
-            serviceID = sc->convert(serviceID);
-            item->setServiceID(serviceID);
+            auto [mval, err] = sc->convert(serviceID);
+            if (!err.empty()) {
+                log_warning("{}: {}", obj->getLocation().string(), err);
+            }
+            item->setServiceID(mval);
         }
 
         // update description if not set in script
         {
             auto val = ScriptNamedProperty(ctx, "description").getStringValue();
             if (!val.empty()) {
-                val = sc->convert(val);
+                auto [mval, err] = sc->convert(val);
+                if (!err.empty()) {
+                    log_warning("{}: {}", obj->getLocation().string(), err);
+                }
                 item->removeMetaData(MetadataFields::M_DESCRIPTION);
-                item->addMetaData(MetadataFields::M_DESCRIPTION, val);
+                item->addMetaData(MetadataFields::M_DESCRIPTION, mval);
             } else if (pcdItem && item->getMetaData(MetadataFields::M_DESCRIPTION).empty() && !pcdItem->getMetaData(MetadataFields::M_DESCRIPTION).empty()) {
                 item->addMetaData(MetadataFields::M_DESCRIPTION, pcdItem->getMetaData(MetadataFields::M_DESCRIPTION));
             }
@@ -775,8 +816,11 @@ std::shared_ptr<CdsObject> Script::dukObject2cdsObject(const std::shared_ptr<Cds
             // update protocol
             auto protocol = ScriptNamedProperty(ctx, "protocol").getStringValue();
             if (!protocol.empty()) {
-                protocol = sc->convert(protocol);
-                protocolInfo = renderProtocolInfo(item->getMimeType(), protocol);
+                auto [mval, err] = sc->convert(protocol);
+                if (!err.empty()) {
+                    log_warning("{}: {}", obj->getLocation().string(), err);
+                }
+                protocolInfo = renderProtocolInfo(item->getMimeType(), mval);
             } else {
                 protocolInfo = renderProtocolInfo(item->getMimeType(), PROTOCOL);
             }
@@ -815,8 +859,11 @@ std::shared_ptr<CdsObject> Script::dukObject2cdsObject(const std::shared_ptr<Cds
         // update upnpShortcut
         auto upnpShortcut = ScriptNamedProperty(ctx, "upnpShortcut").getStringValue();
         if (!upnpShortcut.empty()) {
-            upnpShortcut = sc->convert(upnpShortcut);
-            cont->setUpnpShortcut(upnpShortcut);
+            auto [mval, err] = sc->convert(upnpShortcut);
+            if (!err.empty()) {
+                log_warning("{}: {}", obj->getLocation().string(), err);
+            }
+            cont->setUpnpShortcut(mval);
         }
 
         handleObject2cdsContainer(ctx, pcd, cont);
@@ -968,21 +1015,29 @@ void Script::cdsObject2dukObject(const std::shared_ptr<CdsObject>& obj)
     }
 }
 
-std::string Script::convertToCharset(const std::string& str, charset_convert_t chr)
+std::string Script::convertToCharset(const std::string& str, CharsetConversion chr)
 {
-    switch (chr) {
-    case P2I:
-        return _p2i->convert(str);
-    case M2I:
-        return _m2i->convert(str);
-    case F2I:
-        return _f2i->convert(str);
-    case J2I:
-        return _j2i->convert(str);
-    case I2I:
-        return _i2i->convert(str);
+    auto convCode = [=]() {
+        switch (chr) {
+        case CharsetConversion::P2I:
+            return _p2i->convert(str);
+        case CharsetConversion::M2I:
+            return _m2i->convert(str);
+        case CharsetConversion::F2I:
+            return _f2i->convert(str);
+        case CharsetConversion::J2I:
+            return _j2i->convert(str);
+        case CharsetConversion::I2I:
+            return _i2i->convert(str);
+        default:
+            throw_std_runtime_error("Illegal charset given to convertToCharset(): {}", chr);
+        }
+    };
+    auto [mval, err] = convCode();
+    if (!err.empty()) {
+        log_warning("{}: {}", str, err);
     }
-    throw_std_runtime_error("Illegal charset given to convertToCharset(): {}", chr);
+    return mval;
 }
 
 #endif // HAVE_JS

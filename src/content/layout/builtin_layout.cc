@@ -86,7 +86,10 @@ BuiltinLayout::BuiltinLayout(std::shared_ptr<Content> content)
 #endif
 }
 
-int BuiltinLayout::add(const std::shared_ptr<CdsObject>& obj, const std::pair<int, bool>& parentID, bool useRef)
+int BuiltinLayout::add(
+    const std::shared_ptr<CdsObject>& obj,
+    const std::pair<int, bool>& parentID,
+    bool useRef)
 {
     obj->setParentID(parentID.first);
     if (useRef)
@@ -97,7 +100,12 @@ int BuiltinLayout::add(const std::shared_ptr<CdsObject>& obj, const std::pair<in
     return obj->getID();
 }
 
-int BuiltinLayout::getDir(const std::shared_ptr<CdsObject>& obj, const fs::path& rootPath, const std::string_view& c1, const std::string_view& c2, const std::string& upnpClass)
+int BuiltinLayout::getDir(
+    const std::shared_ptr<CdsObject>& obj,
+    const fs::path& rootPath,
+    const std::string_view& c1,
+    const std::string_view& c2,
+    const std::string& upnpClass)
 {
     fs::path dir;
     auto&& objPath = obj->getLocation();
@@ -110,7 +118,11 @@ int BuiltinLayout::getDir(const std::shared_ptr<CdsObject>& obj, const fs::path&
         dir = getLastPath(objPath);
 
     auto f2i = converterManager->f2i();
-    dir = f2i->convert(dir);
+    auto [mval, err] = f2i->convert(dir);
+    if (!err.empty()) {
+        log_warning("{}: {}", dir.string(), err);
+    }
+    dir = mval;
 
     if (!dir.empty()) {
         std::vector<std::shared_ptr<CdsObject>> dirVect;
@@ -127,7 +139,11 @@ int BuiltinLayout::getDir(const std::shared_ptr<CdsObject>& obj, const fs::path&
     return INVALID_OBJECT_ID;
 }
 
-std::vector<int> BuiltinLayout::addVideo(const std::shared_ptr<CdsObject>& obj, const std::shared_ptr<CdsContainer>& parent, const fs::path& rootpath, const std::map<AutoscanMediaMode, std::string>& containerMap)
+std::vector<int> BuiltinLayout::addVideo(
+    const std::shared_ptr<CdsObject>& obj,
+    const std::shared_ptr<CdsContainer>& parent,
+    const fs::path& rootpath,
+    const std::map<AutoscanMediaMode, std::string>& containerMap)
 {
     auto f2i = converterManager->f2i();
     auto blOption = config->getBoxLayoutListOption(ConfigVal::BOXLAYOUT_BOX);
@@ -192,7 +208,11 @@ std::vector<int> BuiltinLayout::addVideo(const std::shared_ptr<CdsObject>& obj, 
     return result;
 }
 
-std::vector<int> BuiltinLayout::addImage(const std::shared_ptr<CdsObject>& obj, const std::shared_ptr<CdsContainer>& parent, const fs::path& rootpath, const std::map<AutoscanMediaMode, std::string>& containerMap)
+std::vector<int> BuiltinLayout::addImage(
+    const std::shared_ptr<CdsObject>& obj,
+    const std::shared_ptr<CdsContainer>& parent,
+    const fs::path& rootpath,
+    const std::map<AutoscanMediaMode, std::string>& containerMap)
 {
     auto f2i = converterManager->f2i();
     auto blOption = config->getBoxLayoutListOption(ConfigVal::BOXLAYOUT_BOX);
@@ -243,7 +263,7 @@ std::vector<int> BuiltinLayout::addImage(const std::shared_ptr<CdsObject>& obj, 
             }
             std::vector<std::shared_ptr<CdsObject>> ct;
             ct.push_back(containerAt(BoxKeys::imageRoot));
-            ct.push_back(containerAt(BoxKeys::imageAllYears));
+            ct.push_back(containerAt(BoxKeys::imageAllDates));
             ct.push_back(std::make_shared<CdsContainer>(date));
             id = content->addContainerTree(ct, obj);
             result.push_back(add(obj, id));
@@ -256,7 +276,11 @@ std::vector<int> BuiltinLayout::addImage(const std::shared_ptr<CdsObject>& obj, 
     return result;
 }
 
-std::vector<int> BuiltinLayout::addAudio(const std::shared_ptr<CdsObject>& obj, const std::shared_ptr<CdsContainer>& parent, const fs::path& rootpath, const std::map<AutoscanMediaMode, std::string>& containerMap)
+std::vector<int> BuiltinLayout::addAudio(
+    const std::shared_ptr<CdsObject>& obj,
+    const std::shared_ptr<CdsContainer>& parent,
+    const fs::path& rootpath,
+    const std::map<AutoscanMediaMode, std::string>& containerMap)
 {
     auto f2i = converterManager->f2i();
     auto blOption = config->getBoxLayoutListOption(ConfigVal::BOXLAYOUT_BOX);
@@ -342,6 +366,9 @@ std::vector<int> BuiltinLayout::addAudio(const std::shared_ptr<CdsObject>& obj, 
     }
 
     auto artistContainer = std::make_shared<CdsContainer>(artist, UPNP_CLASS_MUSIC_ARTIST);
+    artistContainer->addMetaData(MetadataFields::M_ARTIST, artist);
+    artistContainer->addMetaData(MetadataFields::M_ALBUMARTIST, artist);
+    artistContainer->addMetaData(MetadataFields::M_GENRE, genre);
     if (blOption->getKey(BoxKeys::audioAllSongs)->getEnabled() && blOption->getKey(BoxKeys::audioAllArtists)->getEnabled()) {
         std::vector<std::shared_ptr<CdsObject>> arc;
         arc.push_back(containerAt(BoxKeys::audioRoot));
@@ -389,16 +416,19 @@ std::vector<int> BuiltinLayout::addAudio(const std::shared_ptr<CdsObject>& obj, 
     }
 
     if (blOption->getKey(BoxKeys::audioAllGenres)->getEnabled()) {
+        auto genreContainer = std::make_shared<CdsContainer>(genre, UPNP_CLASS_MUSIC_GENRE);
+        genreContainer->addMetaData(MetadataFields::M_GENRE, genre);
         std::vector<std::shared_ptr<CdsObject>> ct;
         ct.push_back(containerAt(BoxKeys::audioRoot));
         ct.push_back(containerAt(BoxKeys::audioAllGenres));
-        ct.push_back(std::make_shared<CdsContainer>(genre, UPNP_CLASS_MUSIC_GENRE));
+        ct.push_back(std::move(genreContainer));
         id = content->addContainerTree(ct, obj);
         result.push_back(add(obj, id));
     }
 
     if (blOption->getKey(BoxKeys::audioAllComposers)->getEnabled()) {
         auto composerContainer = std::make_shared<CdsContainer>(composer, UPNP_CLASS_MUSIC_COMPOSER);
+        composerContainer->addMetaData(MetadataFields::M_COMPOSER, composer);
         composerContainer->setSearchable(true);
         std::vector<std::shared_ptr<CdsObject>> cc;
         cc.push_back(containerAt(BoxKeys::audioRoot));
@@ -410,6 +440,8 @@ std::vector<int> BuiltinLayout::addAudio(const std::shared_ptr<CdsObject>& obj, 
 
     if (blOption->getKey(BoxKeys::audioAllYears)->getEnabled()) {
         auto yearContainer = std::make_shared<CdsContainer>(date);
+        yearContainer->addMetaData(MetadataFields::M_DATE, date);
+        yearContainer->addMetaData(MetadataFields::M_UPNP_DATE, date);
         yearContainer->setSearchable(true);
         std::vector<std::shared_ptr<CdsObject>> yt;
         yt.push_back(containerAt(BoxKeys::audioRoot));
@@ -455,7 +487,11 @@ std::vector<int> BuiltinLayout::addAudio(const std::shared_ptr<CdsObject>& obj, 
 }
 
 #ifdef ONLINE_SERVICES
-std::vector<int> BuiltinLayout::addOnlineItem(const std::shared_ptr<CdsObject>& obj, OnlineServiceType serviceType, const fs::path& rootpath, const std::map<AutoscanMediaMode, std::string>& containerMap)
+std::vector<int> BuiltinLayout::addOnlineItem(
+    const std::shared_ptr<CdsObject>& obj,
+    OnlineServiceType serviceType,
+    const fs::path& rootpath,
+    const std::map<AutoscanMediaMode, std::string>& containerMap)
 {
     switch (serviceType) {
     case OnlineServiceType::Max:

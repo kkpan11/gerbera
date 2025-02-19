@@ -1,8 +1,22 @@
 .. _layout:
+.. index:: Import
 .. index:: Layout
 
-Layout
-======
+Import and Layout
+=================
+
+Autoscan
+~~~~~~~~
+
+The typical way to get you files loaded into the library is by defining autoscan folder either via web UI (:ref:`Edit Dialog<autoscan-edit>`)
+or via (:ref:`Autoscan Configuration <autoscan>`). On startup each autoscan directory is fully scanned for new or changed files. Depending
+on the type the scan is repeated after the set interval (timed autoscan) or new files are imported as soon as they show up on the disk
+(inotify autoscan; only if compiled in and support by the operating system). In both cases the file is created in `PC Directory` and the
+virtual layout is created or updated.
+
+There also is the option to overwrite autoscan settings for subfolders (:ref:`Tweak Dialog<tweak-edit>`) to change the expected character
+encoding or other import flags. Tweaking only is effective for the next scan, i.e. you have to force a rescan of the folder by deleting the
+respective `PC Directory` entries.
 
 PC Directory
 ~~~~~~~~~~~~
@@ -100,7 +114,10 @@ by the import script. Changing ``size`` for boxlayout ``Playlist/allDirectories`
 Layout Configuration
 ~~~~~~~~~~~~~~~~~~~~
 
-In order to avoid changing scripts or code, layout configuration allow, e.g., setting the captions of entries in the virtual layout tree.
+Boxlayout
+---------
+
+In order to avoid changing scripts or code, layout configuration allows, e.g., setting the captions of entries in the virtual layout tree.
 Each box allows to disable it by setting the attribute ``enabled="false"``. If a parent box is disabled all child boxes will disappear from the layout.
 Boxes in ``AudioStructured`` support setting the size which means the number of initials in that box.
 
@@ -196,3 +213,21 @@ The codes in *js layout* column refer to the *Code* column above.
 +---------------------------------+------------------+-----------+----------------+
 
 The complete list of configuration options can be found in :ref:`Boxlayout Configuration <boxlayout>`.
+
+Script Options
+--------------
+
+Furthermore there are some script options that allow tweaking the layout. The script options and their interpretation
+depend on the layout function. The options can be set in the config.xml section :ref:`script-options <script-options>`
+
++---------------------------------+------------------+--------------------------------------------------------------------------+
+| Option                          | Layout Function  | Description                                                              |
++=================================+==================+==========================================================================+
+| trackNumbers                    | da, sa, ia       | Use 'show' or 'hide' to add track number in front of the track title     |
+|                                 |                  | the default behaviour depends on the function.                           |
++---------------------------------+------------------+--------------------------------------------------------------------------+
+| specialGenre                    | ia               | Add disk number to tracks matching this genre (regular expression)       |
++---------------------------------+------------------+--------------------------------------------------------------------------+
+| spokenGenre                     | ia               | Do not add tracks to 'All' section                                       |
+|                                 |                  | if the genre matches (regular expression)                                |
++---------------------------------+------------------+--------------------------------------------------------------------------+

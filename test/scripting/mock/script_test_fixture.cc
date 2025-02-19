@@ -22,22 +22,22 @@
 */
 #ifdef HAVE_JS
 
-#include <duktape.h>
-#include <fstream>
-#include <gmock/gmock.h>
-#include <gtest/gtest.h>
-
 #include "cds/cds_objects.h"
 #include "config/result/autoscan.h"
 #include "content/scripting/script_names.h"
 #include "metadata/metadata_enums.h"
 #include "util/grb_fs.h"
-#include "util/string_converter.h"
 #include "util/tools.h"
 
 #include "common_script_mock.h"
 #include "duk_helper.h"
 #include "script_test_fixture.h"
+
+#include <duktape.h>
+#include <fstream>
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
+#include <sstream>
 
 std::unique_ptr<CommonScriptMock> CommonScriptTestFixture::commonScriptMock;
 
@@ -107,8 +107,12 @@ void ScriptTestFixture::loadCommon(duk_context* ctx) const
     }
 }
 
-void ScriptTestFixture::dukMockItem(duk_context* ctx, const std::map<std::string, std::string>& props,
-    const std::vector<std::pair<std::string, std::string>>& meta, const std::map<std::string, std::string>& aux, const std::map<std::string, std::string>& res)
+void ScriptTestFixture::dukMockItem(
+    duk_context* ctx,
+    const std::map<std::string, std::string>& props,
+    const std::vector<std::pair<std::string, std::string>>& meta,
+    const std::map<std::string, std::string>& aux,
+    const std::map<std::string, std::string>& res)
 {
     duk_idx_t origIdx = duk_push_object(ctx);
     for (auto&& [name, value] : props) {
@@ -165,9 +169,18 @@ void ScriptTestFixture::dukMockItem(duk_context* ctx, const std::map<std::string
     }
 }
 
-duk_ret_t ScriptTestFixture::dukMockItem(duk_context* ctx, const std::string& mimetype, const std::string& id, int theora, const std::string& title,
-    const std::vector<std::pair<std::string, std::string>>& meta, const std::map<std::string, std::string>& aux, const std::map<std::string, std::string>& res,
-    const std::string& location, int onlineService)
+duk_ret_t ScriptTestFixture::dukMockItem(
+    duk_context* ctx,
+    const std::string& mimetype,
+    const std::string& upnpClass,
+    const std::string& id,
+    int theora,
+    const std::string& title,
+    const std::vector<std::pair<std::string, std::string>>& meta,
+    const std::map<std::string, std::string>& aux,
+    const std::map<std::string, std::string>& res,
+    const std::string& location,
+    int onlineService)
 {
     duk_push_sprintf(ctx, "%s", AutoscanDirectory::ContainerTypesDefaults.at(AutoscanMediaMode::Audio).c_str());
     duk_put_global_string(ctx, "grb_container_type_audio");
@@ -180,6 +193,8 @@ duk_ret_t ScriptTestFixture::dukMockItem(duk_context* ctx, const std::string& mi
     duk_idx_t origIdx = duk_push_object(ctx);
     duk_push_string(ctx, mimetype.c_str());
     duk_put_prop_string(ctx, origIdx, "mimetype");
+    duk_push_string(ctx, upnpClass.c_str());
+    duk_put_prop_string(ctx, origIdx, "upnpclass");
     duk_push_string(ctx, id.c_str());
     duk_put_prop_string(ctx, origIdx, "id");
     duk_push_string(ctx, title.c_str());
@@ -257,7 +272,9 @@ void ScriptTestFixture::mockPlaylistFile(const std::string& mockFile)
     readLineCnt = 0;
 }
 
-void ScriptTestFixture::dukMockPlaylist(duk_context* ctx, const std::map<std::string, std::string>& props)
+void ScriptTestFixture::dukMockPlaylist(
+    duk_context* ctx,
+    const std::map<std::string, std::string>& props)
 {
     duk_push_object(ctx);
     for (auto&& [name, value] : props) {
@@ -266,7 +283,11 @@ void ScriptTestFixture::dukMockPlaylist(duk_context* ctx, const std::map<std::st
     }
 }
 
-duk_ret_t ScriptTestFixture::dukMockPlaylist(duk_context* ctx, const std::string& title, const std::string& location, const std::string& mimetype)
+duk_ret_t ScriptTestFixture::dukMockPlaylist(
+    duk_context* ctx,
+    const std::string& title,
+    const std::string& location,
+    const std::string& mimetype)
 {
     duk_push_object(ctx);
     duk_push_string(ctx, location.c_str());
@@ -279,7 +300,10 @@ duk_ret_t ScriptTestFixture::dukMockPlaylist(duk_context* ctx, const std::string
     return 0;
 }
 
-duk_ret_t ScriptTestFixture::dukMockMetafile(duk_context* ctx, const std::string& location, const std::string& fileName)
+duk_ret_t ScriptTestFixture::dukMockMetafile(
+    duk_context* ctx,
+    const std::string& location,
+    const std::string& fileName)
 {
     duk_push_object(ctx);
     duk_push_string(ctx, location.c_str());
@@ -312,7 +336,9 @@ duk_ret_t ScriptTestFixture::dukMockMetafile(duk_context* ctx, const std::string
     return 0;
 }
 
-void ScriptTestFixture::dukMockMetafile(duk_context* ctx, const std::map<std::string, std::string>& props)
+void ScriptTestFixture::dukMockMetafile(
+    duk_context* ctx,
+    const std::map<std::string, std::string>& props)
 {
     duk_push_object(ctx);
     for (auto&& [name, value] : props) {
@@ -342,7 +368,12 @@ void ScriptTestFixture::dukMockMetafile(duk_context* ctx, const std::map<std::st
     }
 }
 
-void ScriptTestFixture::addGlobalFunctions(duk_context* ctx, const duk_function_list_entry* funcs, const std::map<std::string_view, std::string_view>& config, const std::vector<boxConfig>& boxDefaults)
+void ScriptTestFixture::addGlobalFunctions(
+    duk_context* ctx,
+    const duk_function_list_entry* funcs,
+    const std::map<std::string_view, std::string_view>& configValues,
+    const std::vector<boxConfig>& boxDefaults,
+    const std::map<std::string_view, std::map<std::string_view, std::string_view>>& configDicts)
 {
 
     for (auto&&[meta,str]: MetaEnumMapper::mt_keys) {
@@ -373,10 +404,14 @@ void ScriptTestFixture::addGlobalFunctions(duk_context* ctx, const duk_function_
         duk_put_global_lstring(ctx, field.data(), field.length());
     }
 
-    if (config.empty()) {
-        addConfig(ctx, { { "/import/scripting/virtual-layout/attribute::audio-layout", audioLayout }, { "/import/scripting/virtual-layout/structured-layout/attribute::skip-chars", "" } }, boxDefaults);
+    if (configValues.empty()) {
+        addConfig(
+            ctx,
+            { { "/import/scripting/virtual-layout/attribute::audio-layout", audioLayout }, { "/import/scripting/virtual-layout/structured-layout/attribute::skip-chars", "" } },
+            boxDefaults,
+            configDicts);
     } else {
-        addConfig(ctx, config, boxDefaults);
+        addConfig(ctx, configValues, boxDefaults, configDicts);
     }
 
     duk_push_int(ctx, 0);
@@ -387,12 +422,27 @@ void ScriptTestFixture::addGlobalFunctions(duk_context* ctx, const duk_function_
     duk_pop(ctx);
 }
 
-void ScriptTestFixture::addConfig(duk_context* ctx, const std::map<std::string_view, std::string_view>& config, const std::vector<boxConfig>& boxDefaults)
+void ScriptTestFixture::addConfig(
+    duk_context* ctx,
+    const std::map<std::string_view, std::string_view>& configValues,
+    const std::vector<boxConfig>& boxDefaults,
+    const std::map<std::string_view, std::map<std::string_view, std::string_view>>& configDicts)
 {
     duk_push_object(ctx); // config
-    for (auto&& [key, value] : config) {
+    for (auto&& [key, value] : configValues) {
         duk_push_string(ctx, value.data());
         duk_put_prop_string(ctx, -2, key.data());
+    }
+
+    for (auto&& [dictName, dict] : configDicts) {
+
+        duk_push_object(ctx); // dict
+        for (auto&& [key, value] : dict) {
+            duk_push_string(ctx, value.data());
+            duk_put_prop_string(ctx, -2, key.data());
+        }
+        duk_put_prop_string(ctx, -2, dictName.data()); // dict
+
     }
 
     duk_push_object(ctx); // box-layout
@@ -429,7 +479,11 @@ void ScriptTestFixture::executeScript(duk_context* ctx)
     }
 }
 
-void ScriptTestFixture::callFunction(duk_context* ctx, void(dukMockFunction)(duk_context* ctx, const std::map<std::string, std::string>& props), const std::map<std::string, std::string>& props, const std::string& rootPath)
+void ScriptTestFixture::callFunction(
+    duk_context* ctx,
+    void(dukMockFunction)(duk_context* ctx, const std::map<std::string, std::string>& props),
+    const std::map<std::string, std::string>& props,
+    const std::string& rootPath)
 {
     dukMockFunction(ctx, props);
     duk_put_global_string(ctx, objectName.c_str());
@@ -561,12 +615,39 @@ std::string ScriptTestFixture::print(duk_context* ctx)
 std::string ScriptTestFixture::getYear(duk_context* ctx)
 {
     std::string date = duk_to_string(ctx, 0);
-    // TODO: parse YYYY...
-    duk_push_string(ctx, "2018");
+    std::string_view date_time_format { "%Y-%m-%dT%H:%M:%S" };
+    std::istringstream ss { date };
+    std::tm dt {};
+
+    ss >> std::get_time(&dt, date_time_format.data());
+    if (!ss.fail()) {
+        auto t = std::mktime(&dt);
+        duk_push_string(ctx, fmt::format("{}", dt.tm_year + 1900).c_str());
+    } else
+        duk_push_string(ctx, "0000");
     return date;
 }
 
-std::vector<std::string> ScriptTestFixture::addContainerTree(duk_context* ctx, std::map<std::string, std::string> resMap)
+std::string ScriptTestFixture::mapGenre(
+    duk_context* ctx,
+    std::map<std::string, std::string> genMap)
+{
+    std::string genre = duk_to_string(ctx, 0);
+    int mapped = genMap.find(genre) != genMap.end() ? 1 : 0;
+    auto result = mapped == 1 ? genMap[genre] : genre;
+    duk_push_object(ctx);
+
+    duk_push_int(ctx, mapped);
+    duk_put_prop_string(ctx, -2, "mapped");
+    duk_push_string(ctx, result.c_str());
+    duk_put_prop_string(ctx, -2, "value");
+
+    return result;
+}
+
+std::vector<std::string> ScriptTestFixture::addContainerTree(
+    duk_context* ctx,
+    std::map<std::string, std::string> resMap)
 {
     DukTestHelper dukHelper;
     std::vector<std::string> array = dukHelper.containerToPath(ctx, 0);
@@ -597,7 +678,10 @@ addCdsObjectParams ScriptTestFixture::addCdsObject(duk_context* ctx, const std::
     return params;
 }
 
-copyObjectParams ScriptTestFixture::copyObject(duk_context* ctx, const std::map<std::string, std::string>& obj, const std::map<std::string, std::string>& meta)
+copyObjectParams ScriptTestFixture::copyObject(
+    duk_context* ctx,
+    const std::map<std::string, std::string>& obj,
+    const std::map<std::string, std::string>& meta)
 {
     duk_bool_t isObjectParam = duk_is_object(ctx, 0);
     copyObjectParams params;
@@ -609,7 +693,10 @@ copyObjectParams ScriptTestFixture::copyObject(duk_context* ctx, const std::map<
     return params;
 }
 
-getCdsObjectParams ScriptTestFixture::getCdsObject(duk_context* ctx, const std::map<std::string, std::string>& obj, const std::map<std::string, std::string>& meta)
+getCdsObjectParams ScriptTestFixture::getCdsObject(
+    duk_context* ctx,
+    const std::map<std::string, std::string>& obj,
+    const std::map<std::string, std::string>& meta)
 {
     std::string location = duk_to_string(ctx, 0);
     getCdsObjectParams params;

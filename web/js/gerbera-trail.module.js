@@ -20,13 +20,13 @@
 
     $Id$
 */
-import {Autoscan} from "./gerbera-autoscan.module.js";
-import {Config} from "./gerbera-config.module.js";
-import {GerberaApp} from "./gerbera-app.module.js";
-import {Items} from "./gerbera-items.module.js";
-import {Tree} from "./gerbera-tree.module.js";
-import {Tweaks} from "./gerbera-tweak.module.js";
-import {Updates} from "./gerbera-updates.module.js";
+import { Autoscan } from "./gerbera-autoscan.module.js";
+import { Config } from "./gerbera-config.module.js";
+import { GerberaApp } from "./gerbera-app.module.js";
+import { Items } from "./gerbera-items.module.js";
+import { Tree } from "./gerbera-tree.module.js";
+import { Tweaks } from "./gerbera-tweak.module.js";
+import { Updates } from "./gerbera-updates.module.js";
 
 const destroy = () => {
   const trail = $('#trail');
@@ -43,7 +43,7 @@ const initialize = () => {
 };
 
 const makeTrail = (selectedItem, config) => {
-  const items = (selectedItem !== null) ? gatherTrail(selectedItem) : [{text: "current configuration"}];
+  const items = (selectedItem !== null) ? gatherTrail(selectedItem) : [{ text: "current configuration" }];
   const configDefaults = {
     itemType: GerberaApp.getType()
   };
@@ -87,7 +87,7 @@ const createTrail = (items, config) => {
   });
 };
 
-const makeTrailFromItem = (items) => {
+const makeTrailFromItem = (items, parentItem) => {
   const itemType = GerberaApp.getType();
   const treeElement = (itemType !== 'config') ? Tree.getTreeElementById(items.parent_id) : null;
   let enableAdd = false;
@@ -106,6 +106,7 @@ const makeTrailFromItem = (items) => {
   let onClear;
   let onAddAutoscan;
   let onEditAutoscan;
+  let onRunScan;
   let onAddTweak;
   let onDeleteAll;
   let onRescan;
@@ -116,7 +117,6 @@ const makeTrailFromItem = (items) => {
       enableAdd = true;
     } else if (items.parent_id === 1) {
       enableEdit = true;
-      enableAddAutoscan = true;
     } else {
       const isVirtual = ('virtual' in items) && items.virtual === true;
       const isNotProtected = ('protect_container' in items) && items.protect_container !== true;
@@ -129,8 +129,11 @@ const makeTrailFromItem = (items) => {
     }
   } else if (itemType === 'fs') {
     enableAddTweak = items.parent_id !== 0;
-    enableAddAutoscan = items.parent_id !== 0;
-    enableAdd = items.parent_id !== 0;
+    const allowsAutoscan = !parentItem || !('autoScanType' in parentItem) || !parentItem.autoScanType || parentItem.autoScanType === 'none';
+    const allowsEditAutoscan = parentItem && ('autoScanType' in parentItem) && parentItem.autoScanType && parentItem.autoScanType !== 'none' && parentItem.autoScanType !== 'parent';
+    enableAddAutoscan = items.parent_id !== 0 && allowsAutoscan;
+    enableEditAutoscan = items.parent_id !== 0 && allowsEditAutoscan;
+    enableAdd = items.parent_id !== 0 && !enableEditAutoscan;
   } else if (itemType === 'config') {
     enableConfig = true;
     enableClearConfig = GerberaApp.configMode() == 'expert';
@@ -142,12 +145,14 @@ const makeTrailFromItem = (items) => {
   onDeleteAll = enableDeleteAll ? deleteAllItems : noOp;
   onAddAutoscan = enableAddAutoscan ? addAutoscan : noOp;
   onEditAutoscan = enableEditAutoscan ? addAutoscan : noOp;
+  onRunScan = enableEditAutoscan ? runScan : noOp;
   onAddTweak = enableAddTweak ? addTweak : noOp;
   onSave = enableConfig ? saveConfig : noOp;
-  onClear = enableClearConfig  ? clearConfig : noOp;
+  onClear = enableClearConfig ? clearConfig : noOp;
   onRescan = enableConfig ? reScanLibrary : noOp;
 
   const config = {
+    itemType: itemType,
     enableAdd: enableAdd,
     onAdd: onAdd,
     enableEdit: enableEdit,
@@ -160,6 +165,8 @@ const makeTrailFromItem = (items) => {
     onAddAutoscan: onAddAutoscan,
     enableEditAutoscan: enableEditAutoscan,
     onEditAutoscan: onEditAutoscan,
+    enableRunScan: enableEditAutoscan,
+    onRunScan: onRunScan,
     onAddTweak: onAddTweak,
     enableAddTweak: enableAddTweak,
     enableConfig: enableConfig,
@@ -187,6 +194,10 @@ const editItem = (event) => {
 
 const addAutoscan = (event) => {
   Autoscan.addAutoscan(event);
+};
+
+const runScan = (event) => {
+  Autoscan.runScan(event);
 };
 
 const addTweak = (event) => {
@@ -247,6 +258,7 @@ export const Trail = {
   destroy,
   addItem,
   addAutoscan,
+  runScan,
   addTweak,
   saveConfig,
   clearConfig,

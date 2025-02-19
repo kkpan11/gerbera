@@ -203,11 +203,11 @@ const viewFactory = function (data) {
 const treeItemSelected = function (data) {
   if (viewFactory(data))
     currentItemView.retrieveGerberaItems()
-      .then((response) => loadItems(response))
+      .then((response) => loadItems(response, data.gerbera))
       .catch((err) => GerberaApp.error(err));
 };
 
-const loadItems = (response) => {
+const loadItems = (response, item) => {
   if (response.success) {
     const dataItems = currentItemView.dataItems(response);
     const datagrid = $('#datagrid');
@@ -216,7 +216,7 @@ const loadItems = (response) => {
       datagrid.dataitems('destroy');
     }
     datagrid.dataitems(dataItems);
-    Trail.makeTrailFromItem(dataItems.parentItem);
+    Trail.makeTrailFromItem(dataItems.parentItem, item);
   }
 };
 
@@ -389,7 +389,13 @@ const addVirtualItem = (event) => {
   const item = event.data;
   const editModal = $('#editModal');
   if (item) {
-    editModal.editmodal('addNewItem', { type: 'container', item: item, onSave: addObject });
+    editModal.editmodal('addNewItem',
+      {
+        type: 'container',
+        item: item,
+        onSave: addObject,
+        onData: toggleData,
+      });
     editModal.editmodal('show');
   }
 };
@@ -435,7 +441,8 @@ const loadEditItem = (response) => {
       item: response.item,
       onSave: saveItem,
       onDetails: showDetails,
-      onHide: hideDetails
+      onHide: hideDetails,
+      onData: toggleData,
     });
 
     editModal.editmodal('show');
@@ -523,6 +530,10 @@ const saveItem = () => {
       .then((response) => saveItemComplete(response))
       .catch((err) => GerberaApp.error(err))
   }
+};
+
+const toggleData = (event) => {
+  $('#editModal').editmodal('toggleData', event);
 };
 
 const showDetails = () => {

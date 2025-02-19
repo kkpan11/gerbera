@@ -118,7 +118,7 @@ public:
     /// \brief Updates an object in the database using the given parameters.
     /// \param objectID ID of the object to update
     /// \param parameters key value pairs of fields to be updated
-    void updateObject(int objectID, const std::map<std::string, std::string>& parameters) override;
+    std::shared_ptr<CdsObject> updateObject(int objectID, const std::map<std::string, std::string>& parameters) override;
 
     // returns nullptr if file does not exist or is ignored due to configuration
     std::shared_ptr<CdsObject> createObjectFromFile(const std::shared_ptr<AutoscanDirectory>& adir, const fs::directory_entry& dirEnt, bool followSymlinks, bool allowFifo = false) override;
@@ -254,31 +254,63 @@ protected:
 
     std::vector<std::shared_ptr<Executor>> process_list;
 
-    std::shared_ptr<CdsObject> addFileInternal(const fs::directory_entry& dirEnt, const fs::path& rootpath,
+    std::shared_ptr<CdsObject> addFileInternal(
+        const fs::directory_entry& dirEnt,
+        const fs::path& rootpath,
         AutoScanSetting& asSetting,
         bool lowPriority = false,
         unsigned int parentTaskID = 0,
         bool cancellable = true);
-    std::shared_ptr<CdsObject> _addFile(const fs::directory_entry& dirEnt, fs::path rootPath, AutoScanSetting& asSetting,
+    std::shared_ptr<CdsObject> _addFile(
+        const fs::directory_entry& dirEnt,
+        fs::path rootPath,
+        AutoScanSetting& asSetting,
         const std::shared_ptr<CMAddFileTask>& task = nullptr);
 
     std::shared_ptr<ImportService> getImportService(const std::shared_ptr<AutoscanDirectory>& adir);
-    std::vector<int> _removeObject(const std::shared_ptr<AutoscanDirectory>& adir, const std::shared_ptr<CdsObject>& obj, const fs::path& path, bool rescanResource, bool all);
+    std::vector<int> _removeObject(
+        const std::shared_ptr<AutoscanDirectory>& adir,
+        const std::shared_ptr<CdsObject>& obj,
+        const fs::path& path,
+        bool rescanResource,
+        bool all);
     void cleanupTasks(const fs::path& path);
 
     void scanDir(const std::shared_ptr<AutoscanDirectory>& dir, bool updateUI);
-    void _rescanDirectory(const std::shared_ptr<AutoscanDirectory>& adir, int containerID, const std::shared_ptr<GenericTask>& task = nullptr);
+    void _rescanDirectory(
+        const std::shared_ptr<AutoscanDirectory>& adir,
+        int containerID,
+        const std::shared_ptr<GenericTask>& task = nullptr);
     /* for recursive addition */
-    void addRecursive(std::shared_ptr<AutoscanDirectory>& adir, const fs::directory_entry& subDir, const std::shared_ptr<CdsContainer>& parentContainer, bool followSymlinks, bool hidden, const std::shared_ptr<CMAddFileTask>& task);
-    std::shared_ptr<CdsObject> createSingleItem(const fs::directory_entry& dirEnt, const std::shared_ptr<CdsContainer>& parent, const fs::path& rootPath, bool followSymlinks, bool checkDatabase, bool processExisting, bool firstChild, const std::shared_ptr<AutoscanDirectory>& adir, const std::shared_ptr<CMAddFileTask>& task);
-    bool updateAttachedResources(const std::shared_ptr<AutoscanDirectory>& adir, const std::shared_ptr<CdsObject>& obj, const fs::path& parentPath, bool all);
+    void addRecursive(
+        std::shared_ptr<AutoscanDirectory>& adir,
+        const fs::directory_entry& subDir,
+        const std::shared_ptr<CdsContainer>& parentContainer,
+        bool followSymlinks,
+        bool hidden,
+        const std::shared_ptr<CMAddFileTask>& task);
+    std::shared_ptr<CdsObject> createSingleItem(
+        const fs::directory_entry& dirEnt,
+        const std::shared_ptr<CdsContainer>& parent,
+        const fs::path& rootPath,
+        bool followSymlinks,
+        bool checkDatabase,
+        bool processExisting,
+        bool firstChild,
+        const std::shared_ptr<AutoscanDirectory>& adir,
+        const std::shared_ptr<CMAddFileTask>& task);
+    bool updateAttachedResources(
+        const std::shared_ptr<AutoscanDirectory>& adir,
+        const std::shared_ptr<CdsObject>& obj,
+        const fs::path& parentPath,
+        bool all);
     static void invalidateAddTask(const std::shared_ptr<GenericTask>& t, const fs::path& path);
 
     void initLayout();
     void destroyLayout();
 
     template <typename T>
-    void updateCdsObject(const std::shared_ptr<T>& item, const std::map<std::string, std::string>& parameters);
+    std::shared_ptr<CdsObject> updateCdsObject(const std::shared_ptr<T>& item, const std::map<std::string, std::string>& parameters);
 
 #ifdef ONLINE_SERVICES
     std::unique_ptr<OnlineServiceList> online_services;

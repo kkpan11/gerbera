@@ -21,14 +21,14 @@
     $Id$
 */
 (function ($) {
-  function hideFields (fields) {
+  function hideFields(fields) {
     for (let i = 0; i < fields.length; i++) {
       const field = fields[i];
       field.closest('.form-group').hide();
     }
   }
 
-  function showFields (fields) {
+  function showFields(fields) {
     for (let i = 0; i < fields.length; i++) {
       const field = fields[i];
       field.closest('.form-group').show();
@@ -36,16 +36,20 @@
   }
 
   const defaultClasses = {
-    container: {oclass: 'object.container', type: 'container'},
-    item: {oclass: 'object.item', type: 'item'},
-    external_url: {oclass: 'object.item', type: 'external_url', protocol: 'http-get'},
-    image: {oclass: 'object.item.imageItem', type: 'item'},
-    imagePhoto: {oclass: 'object.item.imageItem.photo', type: 'item'},
-    audio: {oclass: 'object.item.audioItem', type: 'item'},
-    audioBroadcast: {oclass: 'object.item.audioItem.audioBroadcast', type: 'external_url', protocol: 'http-get'},
-    video: {oclass: 'object.item.videoItem', type: 'item'},
-    videoBroadcast: {oclass: 'object.item.videoItem.videoBroadcast', type: 'external_url', protocol: 'http-get'},
+    container: { oclass: 'object.container', type: 'container' },
+    item: { oclass: 'object.item', type: 'item' },
+    external_url: { oclass: 'object.item', type: 'external_url', protocol: 'http-get' },
+    image: { oclass: 'object.item.imageItem', type: 'item' },
+    imagePhoto: { oclass: 'object.item.imageItem.photo', type: 'item' },
+    audio: { oclass: 'object.item.audioItem', type: 'item' },
+    audioBroadcast: { oclass: 'object.item.audioItem.audioBroadcast', type: 'external_url', protocol: 'http-get' },
+    video: { oclass: 'object.item.videoItem', type: 'item' },
+    videoBroadcast: { oclass: 'object.item.videoItem.videoBroadcast', type: 'external_url', protocol: 'http-get' },
   };
+  const purposeValues = [
+    { label: 'Thumbnail', type: 'thumbnail' },
+    { label: 'Subtitle', type: 'subtitle' },
+  ];
   const objectFlags = [
     "Restricted",
     "Searchable",
@@ -56,7 +60,8 @@
     "OnlineService",
     "OggTheora",
   ];
-  function addNewItem (modal, itemData) {
+  let resources = [];
+  function addNewItem(modal, itemData) {
     const itemType = itemData.type;
     const item = itemData.item;
     const editObjectType = modal.find('#editObjectType');
@@ -75,11 +80,15 @@
       editFlagBox[flag] = modal.find('#editFlag-' + flag);
     });
 
-    reset(modal);
 
     editObjectType.off('click').on('click', function () {
       const editObjectType = $(this);
-      addNewItem(modal, {type: editObjectType.val(), item: item, onSave: itemData.onSave})
+      addNewItem(modal, {
+        type: editObjectType.val(),
+        item: item,
+        onSave: itemData.onSave,
+        onData: itemData.onData
+      })
     });
 
     modal.find('#objectIdGroup').hide();
@@ -103,6 +112,8 @@
     hideFields(hiddenFields);
 
     editClass.val(defaultClasses[itemType].oclass);
+    modal.find('.modal-dialog').removeClass('modal-xl');
+    $("#editCol").hide();
     if (defaultClasses[itemType].type === 'container') {
       showFields([editObjectType, editTitle, editClass, editFlags, editFlagBox['Searchable']]);
       hideFields([editLocation, editDesc, editMime, editProtocol]);
@@ -111,11 +122,107 @@
       hideFields([editProtocol]);
     } else if (defaultClasses[itemType].type === 'external_url') {
       editProtocol.val(defaultClasses[itemType].protocol);
-      showFields([editObjectType, editTitle, editLocation, editClass, editDesc, editMime, editProtocol, editFlags, editFlagBox['ProxyUrl'], editFlagBox['OnlineService']]);
+      showFields([editObjectType, editTitle, editLocation, editClass, editDesc, editMime, editProtocol, editFlags,
+        editFlagBox['ProxyUrl'],
+        /* editFlagBox['OnlineService'] */]);
+      modal.find('.modal-dialog').addClass('modal-xl');
+      $("#editCol").show();
+      const restable = modal.find('#resdata');
+      restable.html('');
+      const tfoot = $('<tfoot></tfoot>');
+      const trow = $('<tr></tr>');
+      const th1 = $('<th></th>');
+      const th2 = $('<th colspan="2"></th>');
+      const addRes = $('<button>Add Resource</button>');
+      addRes.off('click').on('click', function () {
+        resources.push({
+          index: resources.length + 1,
+          changed: ['purpose', 'location', 'mime-type', 'protocol'],
+          purpose: ['thumbnail'],
+          'location': [''],
+          'mime-type': ['image/jpg'],
+          protocol: ['http-get']
+        });
+        addNewItem(modal, {
+          type: itemData.type,
+          item: item,
+          onSave: itemData.onSave,
+          onData: itemData.onData
+        });
+      });
+      addRes.appendTo(th2);
+      th1.appendTo(trow);
+      th2.appendTo(trow);
+      trow.appendTo(tfoot);
+
+      resources.forEach((res, i) => {
+        const tbody = makeDetailsHead(restable, 'Resource', `#${i + 1}`, itemData.onData);
+        makePurposeSelect(tbody, 'purpose', res, purposeValues);
+        makeResourceInput(tbody, ['location', 'mime-type', 'protocol'], res);
+        tbody.appendTo(restable);
+      });
+      tfoot.addClass('itemDetailFoot');
+      tfoot.appendTo(restable);
+      restable.show();
     }
   }
 
-  function reset (modal) {
+  function makeDetailsHead(table, caption, value, eventHandler) {
+    const thead = $(`<thead><tr><th>${caption}</th><th colspan="2">${value}</th></tr></thead>`);
+    thead.addClass('itemDetailHead');
+    thead.appendTo(table);
+    const tbody = $('<tbody></tbody>');
+
+    if (eventHandler)
+      thead.click(tbody, eventHandler);
+    tbody.appendTo(table);
+    return tbody;
+  }
+
+  function makePurposeSelect(tbody, p, resource, values) {
+    const purposeSelect = $(`<select name="${p}Select" id="${p}Select"></select>`);
+    purposeSelect.change(
+      function (event) {
+        if (resource.changed)
+          resource.changed.push(p);
+        else
+          resource.changed = [p];
+        if (!resource[p][1])
+          resource[p][1] = resource[p][0];
+        resource[p][0] = event.target.value;
+        resource[p][1] = event.target.value;
+      });
+    values.forEach((purpose) => {
+      const selected = resource[p][0] === purpose.type ? 'selected="selected"' : '';
+      const purposeOption = $(`<option ${selected} value="${purpose.type}">${purpose.label}</option>`);
+      purposeOption.appendTo(purposeSelect);
+    });
+    const trow = $('<tr></tr>');
+    const td1 = $(`<td class="detail-column"><span>${p}</span></td>`);
+    td1.appendTo(trow);
+    const td2 = $('<td colspan="2"></td>');
+    purposeSelect.appendTo(td2);
+    td2.appendTo(trow);
+    trow.appendTo(tbody);
+  }
+
+  function makeResourceInput(tbody, properties, resource) {
+    properties.forEach((p) => {
+      appendMetaItem(tbody, p, resource[p][0], null, null,
+        function (event) {
+          if (resource.changed)
+            resource.changed.push(p);
+          else
+            resource.changed = [p];
+          if (!resource[p][1])
+            resource[p][1] = resource[p][0];
+          resource[p][0] = event.target.value;
+        });
+    });
+  }
+
+  function reset(modal) {
+    resources = [];
     modal.find('#editObjectType').val('item');
     modal.find('#objectId').val('');
     modal.find('#addParentId').val('');
@@ -146,7 +253,7 @@
     modal.find('#hidebutton').hide();
   }
 
-  function appendMetaItem(tbody, name, value, special = null, rawvalue = null) {
+  function appendMetaItem(tbody, name, value, special = null, rawvalue = null, eventHandler = null) {
     let content, text;
     const nl = '\n';
 
@@ -155,28 +262,33 @@
     content.addClass('detail-column');
     text = $('<span></span>');
     text.text(name).appendTo(content);
-    row.append(content);
+    content.appendTo(row);
     if (rawvalue)
       content = $('<td></td>');
     else
       content = $('<td colspan="2"></td>');
 
-    if (value) {
+    if (eventHandler) {
+      const input = $(`<input class="form-control" value="${value}"/>`);
+      input.change(eventHandler);
+      input.appendTo(content);
+    }
+    else if (value) {
       text = $('<span>' + value.replace(RegExp(nl, 'g'), '<br>') + '</span>');
       text.appendTo(content);
     }
     if (special) {
-        special.appendTo(content);
+      special.appendTo(content);
     }
-    row.append(content);
+    content.appendTo(row);
 
     if (rawvalue) {
       content = $('<td></td>');
       text = $('<span>' + rawvalue.replace(RegExp(nl, 'g'), '<br>') + '</span>');
       text.appendTo(content);
-      row.append(content);
+      content.appendTo(row);
     }
-    tbody.append(row);
+    row.appendTo(tbody);
   }
 
   function showDetails(modal) {
@@ -197,17 +309,30 @@
     let result = [];
     objectFlags.forEach((flag) => {
       if (modal.find('#editFlag-' + flag).is(':checked')) {
-         result.push(flag);
+        result.push(flag);
       }
     });
 
     return result.join('|');
   }
 
-  function loadItem (modal, itemData) {
+  function readResources(item) {
+    const data = [];
+    resources.forEach((res) => {
+      if (res.changed) {
+        res.changed.forEach((p) => {
+          const output = `resource.${res.index}.${p}`;
+          item[output] = encodeURIComponent(res[p][0]);
+          data.push(output)
+        })
+      }
+    });
+    item.resources = encodeURIComponent(data.join('|'));
+  }
+
+  function loadItem(modal, itemData) {
     const item = itemData.item;
     if (item) {
-      reset(modal);
       if (item.image) {
         modal.find('#mediaimage').prop('src', item.image.value);
         modal.find('#mediaimage').show();
@@ -228,20 +353,17 @@
 
       const metatable = modal.find('#metadata');
       const detailButton = modal.find('#detailbutton');
-      let tbody;
-      if (item.flags && item.flags.value) {
-        $('<thead><tr><th colspan="3">Extras</th></tr></thead>').appendTo(metatable);
-        tbody = $('<tbody></tbody>');
-        appendMetaItem(tbody, "flags", item.flags.value);
-        metatable.append(tbody);
-      }
       if (item.metadata && item.metadata.metadata.length) {
         detailButton.show();
-        $('<thead><tr><th colspan="3">Metadata</th></tr></thead>').appendTo(metatable);
-        tbody = $('<tbody></tbody>');
+        const tbody = makeDetailsHead(metatable, 'Metadata', '', itemData.onData);
         for (let i = 0; i < item.metadata.metadata.length; i++) {
           appendMetaItem(tbody, item.metadata.metadata[i].metaname, item.metadata.metadata[i].metavalue);
         }
+      }
+      if (item.flags && item.flags.value) {
+        const tbody = makeDetailsHead(metatable, 'Extras', '', itemData.onData);
+        appendMetaItem(tbody, "flags", item.flags.value);
+        tbody.hide();
         metatable.append(tbody);
       }
 
@@ -249,12 +371,11 @@
       if (item.auxdata && item.auxdata.auxdata.length) {
         detailButton.show();
         auxtable.show();
-        $('<thead><tr><th colspan="3">Aux Data</th></tr></thead>').appendTo(auxtable);
-        tbody = $('<tbody></tbody>');
+        const tbody = makeDetailsHead(auxtable, 'Aux Data', '', itemData.onData);
         for (let i = 0; i < item.auxdata.auxdata.length; i++) {
           appendMetaItem(tbody, item.auxdata.auxdata[i].auxname, item.auxdata.auxdata[i].auxvalue);
         }
-        auxtable.append(tbody);
+        tbody.hide();
       } else {
         auxtable.hide();
       }
@@ -263,19 +384,44 @@
       if (item.resources && item.resources.resources.length) {
         detailButton.show();
         restable.show();
+        let currentResource = { index: '???', properties: [] };
         for (let i = 0; i < item.resources.resources.length; i++) {
           if (item.resources.resources[i].resname === '----RESOURCE----') {
-            $(`<thead><tr><th>Resource</th><th colspan="2">${item.resources.resources[i].resvalue}</th></tr></thead>`).appendTo(restable);
-            tbody = $('<tbody></tbody>');
-            restable.append(tbody);
-          } else if (item.resources.resources[i].resname === 'image') {
-            appendMetaItem(tbody, 'content', null, $('<img width="50px" class="resourceImage" src="' +  item.resources.resources[i].resvalue + '"/>'));
-          } else if (item.resources.resources[i].resname === 'link') {
-            appendMetaItem(tbody, 'content', null, $('<a href=' +  item.resources.resources[i].resvalue + '>Open</span>'));
+            currentResource = { index: item.resources.resources[i].resvalue, properties: [] };
+            resources.push(currentResource);
           } else {
-            appendMetaItem(tbody, item.resources.resources[i].resname, item.resources.resources[i].resvalue, null, item.resources.resources[i].rawvalue);
+            currentResource.properties.push(item.resources.resources[i].resname);
+            currentResource[item.resources.resources[i].resname] = [item.resources.resources[i].resvalue, item.resources.resources[i].rawvalue];
           }
         }
+        resources.forEach((res, i) => {
+          const tbody = makeDetailsHead(restable, 'Resource', `#${res.index}`, itemData.onData);
+          if (i > 0)
+            tbody.hide();
+          res.properties.forEach((p) => {
+            switch (p) {
+              case 'image': {
+                appendMetaItem(tbody, 'content', null, $(`<img width="50px" class="resourceImage" src="${res[p][0]}"/>`));
+                break;
+              }
+              case 'link': {
+                appendMetaItem(tbody, 'content', null, $(`<a href=${res[p][0]}>Open</span>`));
+                break;
+              }
+              case 'resFile': {
+                if (res.handlerType[0] === 'Exturl')
+                  makeResourceInput(tbody, [p], res);
+                else
+                  appendMetaItem(tbody, p, res[p][0], null, res[p][1]);
+                break;
+              }
+              default: {
+                appendMetaItem(tbody, p, res[p][0], null, res[p][1]);
+                break;
+              }
+            }
+          });
+        });
       } else {
         restable.hide();
       }
@@ -304,7 +450,14 @@
     }
   }
 
-  function loadCdsObject (modal, item) {
+  function toggleData(modal, target) {
+    if ($(target.data[0]).is(":hidden") === true)
+      $(target.data[0]).show();
+    else
+      $(target.data[0]).hide();
+  }
+
+  function loadCdsObject(modal, item) {
     modal.find('#editTitle')
       .val(item.title.value)
       .prop('disabled', !item.title.editable)
@@ -345,7 +498,7 @@
     }
   }
 
-  function loadSimpleItem (modal, item, obj_type) {
+  function loadSimpleItem(modal, item, obj_type) {
     modal.find('#editLocation')
       .val(item.location.value)
       .prop('disabled', !item.location.editable)
@@ -383,7 +536,7 @@
     hideFields(hiddenFields);
   }
 
-  function loadContainer (modal, item) {
+  function loadContainer(modal, item) {
     modal.find('#editFlags')
       .val(item.flags.value)
       .prop('disabled', true)
@@ -408,7 +561,7 @@
     ]);
   }
 
-  function loadExternalUrl (modal, item) {
+  function loadExternalUrl(modal, item) {
     modal.find('#editLocation')
       .val(item.location.value)
       .prop('disabled', !item.location.editable)
@@ -437,7 +590,7 @@
     showFields([
       modal.find('#editFlags'),
       modal.find('#editFlag-ProxyUrl'),
-      modal.find('#editFlag-OnlineService'),
+      // modal.find('#editFlag-OnlineService'),
     ]);
     hideFields([
       modal.find('#editFlag-Searchable'),
@@ -446,10 +599,11 @@
       modal.find('#editFlag-PlaylistRef'),
       modal.find('#editFlag-OggTheora'),
       modal.find('#editFlag-UseResourceRef'),
+      modal.find('#editFlag-OnlineService'),
     ]);
   }
 
-  function saveItem (modal) {
+  function saveItem(modal) {
     let item;
     const objectId = modal.find('#objectId');
     const editObjectType = modal.find('#editObjectType');
@@ -467,6 +621,7 @@
           description: encodeURIComponent(editDesc.val()),
           flags: readFlags(modal),
         };
+        readResources(item);
         break;
       }
       case 'container': {
@@ -475,6 +630,7 @@
           title: encodeURIComponent(editTitle.val()),
           flags: readFlags(modal),
         };
+        readResources(item);
         break;
       }
       case 'external_url': {
@@ -487,13 +643,14 @@
           protocol: editProtocol.val(),
           flags: readFlags(modal),
         };
+        readResources(item);
         break;
       }
     }
     return item;
   }
 
-  function addObject (modal) {
+  function addObject(modal) {
     let item;
     const parentId = modal.find('#addParentId');
     const editObjectType = modal.find('#editObjectType');
@@ -515,6 +672,7 @@
           description: encodeURIComponent(editDesc.val()),
           flags: readFlags(modal),
         };
+        readResources(item);
         break;
       }
       case 'container': {
@@ -525,6 +683,7 @@
           title: encodeURIComponent(editTitle.val()),
           flags: readFlags(modal),
         };
+        readResources(item);
         break;
       }
       case 'external_url': {
@@ -539,6 +698,7 @@
           protocol: editProtocol.val(),
           flags: readFlags(modal),
         };
+        readResources(item);
         break;
       }
     }
@@ -559,6 +719,7 @@
       _super.Constructor.prototype[args.shift()].apply(this, args);
     },
     addNewItem: function (itemData) {
+      reset($(this._element));
       return addNewItem($(this._element), itemData);
     },
     addObject: function () {
@@ -574,10 +735,14 @@
       return hideDetails($(this._element));
     },
     loadItem: function (itemData) {
+      reset($(this._element));
       return loadItem($(this._element), itemData);
     },
     saveItem: function () {
       return saveItem($(this._element));
+    },
+    toggleData: function (target) {
+      return toggleData($(this._element), target);
     }
   });
 

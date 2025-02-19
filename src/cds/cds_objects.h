@@ -207,17 +207,22 @@ public:
     void clearFlag(unsigned int mask) { objectFlags &= ~mask; }
 
     /// \brief Query single metadata value.
-    std::string getMetaData(const MetadataFields key) const
+    std::string getMetaData(const MetadataFields& key) const
     {
         auto field = MetaEnumMapper::getMetaFieldName(key);
-        auto it = std::find_if(metaData.begin(), metaData.end(), [=](auto&& md) { return md.first == field; });
-        return it != metaData.end() ? it->second : std::string();
+        return this->getMetaData(field);
     }
     /// \brief Query single metadata value.
     std::string getMetaData(const std::string& field) const
     {
         auto it = std::find_if(metaData.begin(), metaData.end(), [=](auto&& md) { return md.first == field; });
         return it != metaData.end() ? it->second : std::string();
+    }
+    /// \brief Query multivalue metadata.
+    std::vector<std::string> getMetaGroup(const MetadataFields& key) const
+    {
+        auto field = MetaEnumMapper::getMetaFieldName(key);
+        return this->getMetaGroup(field);
     }
     /// \brief Query multivalue metadata.
     std::vector<std::string> getMetaGroup(const std::string& field) const
@@ -329,9 +334,10 @@ public:
     }
 
     /// \brief Query resource tag with the given index
-    std::shared_ptr<CdsResource> getResource(std::size_t index) const
+    std::shared_ptr<CdsResource> getResource(int index) const
     {
-        return resources.at(index);
+        auto res = std::find_if(resources.begin(), resources.end(), [index](auto&& r) { return r->getResId() == index; });
+        return res != resources.end() ? *res : nullptr;
     }
 
     /// \brief Query resource tag with the given handler id
